@@ -1,0 +1,12 @@
+  cpp:
+    container_name: cpp
+    build:
+      context: .
+      dockerfile: cpp.dockerfile
+    volumes:
+      - ./build:/var/www/cpp/build
+      - ./src:/var/www/cpp/src
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    tty: true
