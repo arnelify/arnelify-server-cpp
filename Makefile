@@ -1,14 +1,5 @@
 # Boot Makefile
 # See https://www.gnu.org/software/make/manual/make.html for more about make.
-#
-# Add the following to your IncludePath settings:
-# C/C++ IntelliSense Plugin > Settings > Clang_format_fallback Style > Google
-#	"includePath": [
-#		"${workspaceFolder}/src/",
-#		"${workspaceFolder}/src/cpp"
-#		"/opt/homebrew/include",
-#		"/opt/homebrew/include/json",
-#	]
 
 # ENGINE
 ENGINE_BUILD = g++

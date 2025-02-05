@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
-struct ArnelifyServerOpts {
+struct ArnelifyServerOpts final {
   const bool SERVER_ALLOW_EMPTY_FILES;
   const std::size_t SERVER_BLOCK_SIZE_KB;
   const std::string SERVER_CHARSET;

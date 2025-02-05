@@ -6,13 +6,14 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <optional>
 #include <unistd.h>
 #include <zlib.h>
 
 #include "contracts/callback.hpp"
 #include "contracts/opts.hpp"
 
-class ArnelifyTransmitter {
+class ArnelifyTransmitter final {
  private:
   std::size_t blockSize;
   std::string body;
@@ -29,6 +30,7 @@ class ArnelifyTransmitter {
   int code;
   std::filesystem::path filePath;
   bool isGzip;
+  bool isStatic;
   std::map<std::string, std::string> headers;
   const ArnelifyTransmitterOpts opts;
   const int socket;
@@ -108,8 +110,9 @@ class ArnelifyTransmitter {
   void resetHeaders(const bool &init = false) {
     if (!init) this->headers.clear();
 
-    this->headers["Content-Length"] = "0";
     this->headers["Connection"] = "close";
+    this->headers["Content-Length"] = "0";
+    this->headers["Content-Type"] = this->getMime(".json");
     this->headers["Server"] = "Arnelify Server";
   }
 
@@ -205,7 +208,12 @@ class ArnelifyTransmitter {
 
  public:
   ArnelifyTransmitter(const int &s, ArnelifyTransmitterOpts &o)
-      : blockSize(65536), code(200), isGzip(false), opts(o), socket(s) {
+      : blockSize(65536),
+        code(200),
+        isGzip(false),
+        isStatic(false),
+        opts(o),
+        socket(s) {
     this->blockSize = this->opts.TRANSMITTER_BLOCK_SIZE_KB * 1024;
     this->resetHeaders(true);
   }
@@ -213,45 +221,46 @@ class ArnelifyTransmitter {
   void addBody(const std::string &body) {
     const bool hasFile = !this->filePath.empty();
     if (hasFile) {
-      this->callback("Can't add body to a Response that contains a filePath.",
+      this->callback("Can't add body to a Response that contains a file.",
                      true);
-      return;
+      exit(1);
     }
 
     this->body.append(body);
   }
 
   void end() {
-    const bool hasGzip = this->isGzip && this->opts.TRANSMITTER_GZIP;
     const bool hasFile = !this->filePath.empty();
     if (hasFile) {
       this->body.clear();
       std::ifstream file(this->filePath, std::ios::binary);
-      if (!file.is_open()) {
-        const std::string sFilePath = std::string(this->filePath);
-        this->callback("Failed to open file: " + sFilePath, true);
+      if (file.is_open()) {
+        const std::size_t fileSize = std::filesystem::file_size(this->filePath);
+        const std::string fileExt = filePath.extension().string();
+        const std::string fileName = filePath.filename().string();
+        this->headers["Content-Type"] = getMime(fileExt);
+        if (!this->isStatic) {
+          this->headers["Content-Disposition"] =
+              "attachment; filename=\"" + fileName + "\"";
+        }
+
+        if (this->isGzip && this->blockSize > fileSize && fileSize > 96) {
+          this->sendFileCompressed(file);
+          return;
+        }
+
+        this->sendFile(file, fileSize);
         return;
       }
 
-      const std::size_t fileSize = std::filesystem::file_size(this->filePath);
-      const std::string fileExt = filePath.extension().string();
-      const std::string fileName = filePath.filename().string();
-
-      this->headers["Content-Type"] = getMime(fileExt);
-      this->headers["Content-Disposition"] =
-          "attachment; filename=\"" + fileName + "\"";
-      if (hasGzip && this->blockSize > fileSize && fileSize > 96) {
-        this->sendFileCompressed(file);
-        return;
-      }
-
-      this->sendFile(file, fileSize);
-      return;
+      this->code = 404;
+      this->body = "{\"code\":404,\"Not found.\"}";
+      this->callback("Failed to open file: " + std::string(this->filePath),
+                     true);
     }
 
     const std::size_t bytesRead = this->body.length();
-    this->headers["Content-Type"] = getMime(".json");
-    if (hasGzip && this->blockSize > bytesRead && bytesRead > 96) {
+    if (this->isGzip && this->blockSize > bytesRead && bytesRead > 96) {
       this->sendBodyCompressed(bytesRead);
       return;
     }
@@ -267,11 +276,13 @@ class ArnelifyTransmitter {
 
   void setEncoding(const std::string &encoding) {
     const std::size_t gzipStart = encoding.find("gzip");
-    this->isGzip = gzipStart != std::string::npos;
+    if (this->opts.TRANSMITTER_GZIP) {
+      this->isGzip = gzipStart != std::string::npos;
+    }
   }
 
   void setFile(const std::filesystem::path &filePath,
-               const std::optional<std::string> &fileNameOpt = std::nullopt) {
+               const bool &isStatic = false) {
     const bool hasBody = !body.empty();
     if (hasBody) {
       this->callback(
@@ -280,6 +291,7 @@ class ArnelifyTransmitter {
     }
 
     this->filePath = filePath;
+    this->isStatic = isStatic;
   }
 
   void setHeader(const std::string &key, const std::string &value) {
@@ -287,6 +299,6 @@ class ArnelifyTransmitter {
   }
 };
 
-using Res = ArnelifyTransmitter*;
+using Res = ArnelifyTransmitter *;
 
 #endif

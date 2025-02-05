@@ -4,7 +4,7 @@
 #include <filesystem>
 #include <iostream>
 
-struct ArnelifyReceiverOpts {
+struct ArnelifyReceiverOpts final {
   const bool RECEIVER_ALLOW_EMPTY_FILES;
   const std::string RECEIVER_CLIENT;
   const bool RECEIVER_KEEP_EXTENSIONS;

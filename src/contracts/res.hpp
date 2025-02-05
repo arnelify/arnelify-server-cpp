@@ -12,6 +12,15 @@ using Req = Json::Value;
 struct Res {
  private:
   Json::Value res;
+  std::function<void(const std::string&, const bool&)> callback =
+      [](const std::string& message, const bool& isError) {
+        if (isError) {
+          std::cout << "[Arnelify Server]: Error: " << message << std::endl;
+          exit(1);
+        }
+
+        std::cout << "[Arnelify Server]: " << message << std::endl;
+      };
 
  public:
   Res() {
@@ -21,28 +30,66 @@ struct Res {
     this->res["headers"] = Json::objectValue;
   }
 
-  void setCode(const int& code) { this->res["code"] = code; }
-  void setFile(const std::string& filePath) { this->res["filePath"] = filePath; }
-  void setHeader(const std::string& key, const std::string& value) {
-    this->res["headers"][key] = value;
-  }
-
   void addBody(const std::string& chunk) {
+    const std::string filePath = this->res["filePath"].asString();
+    const bool hasFile = !filePath.empty();
+    if (hasFile) {
+      this->callback("Can't add body to a Response that contains a file.",
+                     true);
+      exit(1);
+    }
+
     this->res["body"] = this->res["body"].asString() + chunk;
   }
 
   void end() {
-    if (!this->res["filePath"].asString().empty()) {
+    const std::string filePath = this->res["filePath"].asString();
+    const bool hasFile = !filePath.empty();
+    if (hasFile) {
       this->res["body"] = "";
       return;
     }
 
-    this->res["filePath"] = "";
+    const std::string body = this->res["body"].asString();
+    const bool hasBody = !body.empty();
+    if (hasBody) {
+      this->res["filePath"] = "";
+      this->res["isStatic"] = false;
+      return;
+    }
+
+    this->callback("Add the body or set the file.", true);
+    exit(1);
+  }
+
+  void setCallback(
+      const std::function<void(const std::string&, const bool&)>& callback) {
+    this->callback = callback;
+  }
+
+  void setCode(const int& code) { this->res["code"] = code; }
+
+  void setFile(const std::string& filePath, const bool& isStatic = false) {
+    const std::string body = this->res["body"].asString();
+    const bool hasBody = !body.empty();
+    if (hasBody) {
+      this->callback(
+          "Can't add an attachment to a Response that contains a body.", true);
+      return;
+    }
+
+    this->res["filePath"] = filePath;
+    this->res["isStatic"] = isStatic;
+  }
+
+  void setHeader(const std::string& key, const std::string& value) {
+    this->res["headers"][key] = value;
   }
 
   const std::string serialize() {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
+    
     return Json::writeString(writer, this->res);
   }
 };

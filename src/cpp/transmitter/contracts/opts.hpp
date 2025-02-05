@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-struct ArnelifyTransmitterOpts {
+struct ArnelifyTransmitterOpts final {
   const std::size_t TRANSMITTER_BLOCK_SIZE_KB;
   const std::string TRANSMITTER_CHARSET;
   const bool TRANSMITTER_GZIP;

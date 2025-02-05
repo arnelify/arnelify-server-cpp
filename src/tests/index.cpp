@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
   opts["SERVER_MAX_FILE_SIZE_MB"] = 60;
   opts["SERVER_PORT"] = 3001;
   opts["SERVER_QUEUE_LIMIT"] = 1024;
+  opts["SERVER_UPLOAD_PATH"] = "./src/storage/upload";
 
   ArnelifyServer server(opts);
 
@@ -28,6 +29,8 @@ int main(int argc, char* argv[]) {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
     writer["emitUTF8"] = true;
+
+    res.setCode(200);
     res.addBody(Json::writeString(writer, req));
     res.end();
   });

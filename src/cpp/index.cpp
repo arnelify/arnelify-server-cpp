@@ -84,6 +84,8 @@ class ArnelifyServer {
       res->addBody(body);
       res->end();
 
+      delete receiver;
+      delete res;
       return;
     }
 

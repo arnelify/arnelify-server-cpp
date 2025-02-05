@@ -13,7 +13,7 @@
 
 using Req = Json::Value;
 
-class ArnelifyReceiver {
+class ArnelifyReceiver final {
  private:
   int SIGNAL_ACCEPTED;
   int SIGNAL_ERROR;
@@ -165,7 +165,7 @@ class ArnelifyReceiver {
     std::stringstream ss(value);
     std::string param;
     while (std::getline(ss, param, ';')) {
-      std::size_t equalStart = param.find('=');
+      const std::size_t equalStart = param.find('=');
       const bool hasEqual = equalStart != std::string::npos;
       if (hasEqual) {
         if (isFirst) {
@@ -759,7 +759,6 @@ class ArnelifyReceiver {
 
         opts(o),
         length(0),
-        size(0),
 
         hasBody(false),
         hasHeaders(false),
@@ -768,6 +767,8 @@ class ArnelifyReceiver {
         hasVersion(false),
 
         startSize(false),
+        size(0),
+
         fieldsSizeTotal(0),
         filesCounter(0),
         filesSizeTotal(0),
@@ -784,7 +785,7 @@ class ArnelifyReceiver {
     this->req["_state"] = _state;
   }
 
-  int onBlock(const char* block, std::size_t bytesRead) {
+  int onBlock(const char* block, const std::size_t& bytesRead) {
     this->buffer.append(block, bytesRead);
 
     if (!this->hasMethod) {
