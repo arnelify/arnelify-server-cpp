@@ -1,6 +1,6 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.6.0-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-purple)
+![Arnelify](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.6.1-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
 
 ## 🚀 About
 **Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful http-server written in C and C++.
@@ -26,9 +26,9 @@ Compile library:
 ```
 make build
 ```
-Run tests:
+Run test:
 ```
-make tests
+make test
 ```
 ## 📚 Code Examples
 Configure the C/C++ IntelliSense plugin for VSCode (optional).
@@ -44,10 +44,8 @@ IncludePath for VSCode (optional):
   "${workspaceFolder}/src"
 ],
 ```
-You can find code examples here:
-```
-./src/tests/index.cpp
-```
+You can find code examples <a href="https://github.com/arnelify/arnelify-server-cpp/blob/main/src/tests/index.cpp">here</a>.
+
 | **Option**|**Description**|
 |-|-|
 | **SERVER_ALLOW_EMPTY_FILES**| If this option is enabled, the server will not reject empty files.|
@@ -72,7 +70,7 @@ Join us to help improve this software, fix bugs or implement new functionality. 
 
 
 ## ⭐ Release Notes
-Version 0.6.0 - Minimalistic dynamic library
+Version 0.6.1 - Minimalistic dynamic library
 
 We are excited to introduce the Arnelify Server C / C++ dynamic library! Please note that this version is raw and still in active development.
 

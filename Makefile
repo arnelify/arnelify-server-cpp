@@ -30,8 +30,8 @@ build:
 	clear && mkdir -p ./build && rm -rf ./build/*
 	${ENGINE_BUILD} ${ENGINE_FLAGS} ${INC} ${LINK} -fPIC -shared ${PATH_SRC} -o ${PATH_BIN}
 
-tests:
+test:
 	clear && mkdir -p ./src/tests/bin && rm -rf ./src/tests/bin/*
 	${ENGINE_WATCH} $(ENGINE_FLAGS) $(PATH_TESTS_SRC) ${INC} ${LINK} -o $(PATH_TESTS_BIN) && $(PATH_TESTS_BIN)
 
-.PHONY: build tests
+.PHONY: build test

@@ -4,8 +4,7 @@
       context: .
       dockerfile: cpp.dockerfile
     volumes:
-      - ./build:/var/www/cpp/build
-      - ./src:/var/www/cpp/src
+      - ./:/var/www/cpp
     healthcheck:
       start_period: 10s
       test: ["CMD", "curl", "-f", "http://localhost:3001"]
