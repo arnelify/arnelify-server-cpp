@@ -134,6 +134,7 @@ struct StdToC {
   }
 };
 
+using ArnelifyServerHandler = std::function<void(const Req &, Res &)>;
 std::function<void(const std::string&, const bool&)> StdToC::callback = nullptr;
 std::function<void(const Req&, Res&)> StdToC::handler = nullptr;
 

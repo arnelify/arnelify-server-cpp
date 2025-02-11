@@ -8,6 +8,7 @@
 #include "../index.cpp"
 
 int main(int argc, char* argv[]) {
+  
   Json::Value opts;
   opts["SERVER_ALLOW_EMPTY_FILES"] = true;
   opts["SERVER_BLOCK_SIZE_KB"] = 64;

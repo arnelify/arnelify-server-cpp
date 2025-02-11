@@ -11,12 +11,11 @@
 
 #include "json.h"
 
-#include "contracts/res.hpp"
+#include "contracts/handler.hpp"
 
 class ArnelifyServer {
  private:
   void *lib = nullptr;
-  std::filesystem::path libPath;
   const Json::Value opts;
   StdToC stdtoc;
 
@@ -34,8 +33,45 @@ class ArnelifyServer {
     }
   }
 
-  std::function<void(const Req &, Res &)> handler = [](const Req &req,
-                                                       Res &res) {
+  const std::string getLibPath() {
+    const std::filesystem::path scriptDir =
+        std::filesystem::absolute(__FILE__).parent_path();
+
+    const bool hasExitSegment = scriptDir.string().ends_with("..");
+    if (!hasExitSegment) {
+      std::filesystem::path libDir = scriptDir.parent_path();
+      const std::string libPath = libDir / "build" / "index.so";
+      return libPath;
+    }
+
+    std::istringstream stream(scriptDir);
+    std::deque<std::string> segments;
+    std::string segment;
+
+    while (std::getline(stream, segment, '/')) {
+      if (segment.empty()) continue;
+
+      if (segment == "..") {
+        if (!segments.empty()) {
+          segments.pop_back();
+          segments.pop_back();
+        }
+        continue;
+      }
+
+      segments.push_back(segment);
+    }
+
+    std::string libPath;
+    for (const auto &segment : segments) {
+      libPath += "/" + segment;
+    }
+
+    libPath += "/build/index.so";
+    return libPath;
+  }
+
+  ArnelifyServerHandler hndler = [](const Req &req, Res &res) {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
     writer["emitUTF8"] = true;
@@ -49,9 +85,8 @@ class ArnelifyServer {
 
  public:
   ArnelifyServer(const Json::Value &o) : opts(o) {
-    std::filesystem::path folderPath = std::filesystem::current_path();
-    this->libPath = folderPath / "build" / "index.so";
-    this->lib = dlopen(this->libPath.c_str(), RTLD_LAZY);
+    const std::string libPath = this->getLibPath();
+    this->lib = dlopen(libPath.c_str(), RTLD_LAZY);
     if (!this->lib) throw std::runtime_error(dlerror());
 
     loadFunction("server_create", this->server_create);
@@ -63,7 +98,7 @@ class ArnelifyServer {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
     writer["emitUTF8"] = true;
-    
+
     const std::string cOpts = Json::writeString(writer, this->opts);
     this->server_create(cOpts.c_str());
   }

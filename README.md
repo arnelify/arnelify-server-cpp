@@ -1,11 +1,12 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.6.1-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
+![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.6.2-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
 
 ## 🚀 About
 **Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful http-server written in C and C++.
 
 ## 📋 Minimal Requirements
+> Important: It's strongly recommended to use in a container that has been built from the gcc v14.2.0 image.
 * CPU: Apple M1 / Intel Core i7 / AMD Ryzen 7
 * OS: Debian 11 / MacOS 15 / Windows 10 with <a href="https://learn.microsoft.com/en-us/windows/wsl/install">WSL2</a>.
 * RAM: 4 GB
@@ -72,7 +73,7 @@ Join us to help improve this software, fix bugs or implement new functionality. 
 ## ⭐ Release Notes
 Version 0.6.1 - Minimalistic dynamic library
 
-We are excited to introduce the Arnelify Server C / C++ dynamic library! Please note that this version is raw and still in active development.
+We are excited to introduce the Arnelify Server for C++ dynamic library! Please note that this version is raw and still in active development.
 
 Change log:
 
