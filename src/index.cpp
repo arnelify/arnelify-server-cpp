@@ -71,7 +71,8 @@ class ArnelifyServer {
     return libPath;
   }
 
-  ArnelifyServerHandler hndler = [](const Req &req, Res &res) {
+  ArnelifyServerHandler handler = [](const ArnelifyServerReq &req,
+                                     ArnelifyServerRes &res) {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
     writer["emitUTF8"] = true;
@@ -110,13 +111,12 @@ class ArnelifyServer {
     this->lib = nullptr;
   }
 
-  void setHandler(const std::function<void(const Req &, Res &)> &handler) {
+  void setHandler(const ArnelifyServerHandler &handler) {
     stdtoc.setStdHandler(handler);
     this->server_set_handler(StdToC::cHandler, 1);
   }
 
-  void start(
-      const std::function<void(const std::string &, const bool &)> &callback) {
+  void start(const ArnelifyServerCallback &callback) {
     stdtoc.setStdCallback(callback);
     this->server_start(StdToC::cCallback);
   }

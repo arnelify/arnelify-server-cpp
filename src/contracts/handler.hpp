@@ -7,23 +7,25 @@
 
 #include "json.h"
 
-using Req = Json::Value;
+using ArnelifyServerCallback =
+    std::function<void(const std::string&, const bool&)>;
+using ArnelifyServerReq = Json::Value;
 
-struct Res {
+struct ArnelifyServerRes {
  private:
   Json::Value res;
-  std::function<void(const std::string&, const bool&)> callback =
-      [](const std::string& message, const bool& isError) {
-        if (isError) {
-          std::cout << "[Arnelify Server]: Error: " << message << std::endl;
-          exit(1);
-        }
+  ArnelifyServerCallback callback = [](const std::string& message,
+                                       const bool& isError) {
+    if (isError) {
+      std::cout << "[Arnelify Server]: Error: " << message << std::endl;
+      exit(1);
+    }
 
-        std::cout << "[Arnelify Server]: " << message << std::endl;
-      };
+    std::cout << "[Arnelify Server]: " << message << std::endl;
+  };
 
  public:
-  Res() {
+  ArnelifyServerRes() {
     this->res["body"] = "";
     this->res["code"] = 200;
     this->res["filePath"] = "";
@@ -62,8 +64,7 @@ struct Res {
     exit(1);
   }
 
-  void setCallback(
-      const std::function<void(const std::string&, const bool&)>& callback) {
+  void setCallback(const ArnelifyServerCallback& callback) {
     this->callback = callback;
   }
 
@@ -89,21 +90,23 @@ struct Res {
   const std::string serialize() {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
-    
+
     return Json::writeString(writer, this->res);
   }
 };
 
+using ArnelifyServerHandler =
+    std::function<void(const ArnelifyServerReq&, ArnelifyServerRes&)>;
+
 struct StdToC {
   static std::function<void(const std::string&, const bool&)> callback;
-  static std::function<void(const Req&, Res&)> handler;
+  static ArnelifyServerHandler handler;
 
-  void setStdCallback(
-      const std::function<void(const std::string&, const bool&)> callback) {
+  void setStdCallback(const ArnelifyServerCallback& callback) {
     StdToC::callback = callback;
   }
 
-  void setStdHandler(const std::function<void(const Req&, Res&)> handler) {
+  void setStdHandler(const ArnelifyServerHandler& handler) {
     StdToC::handler = handler;
   }
 
@@ -123,7 +126,7 @@ struct StdToC {
       exit(1);
     }
 
-    Res res;
+    ArnelifyServerRes res;
     handler(req, res);
     const std::string serialized = res.serialize();
 
@@ -134,8 +137,7 @@ struct StdToC {
   }
 };
 
-using ArnelifyServerHandler = std::function<void(const Req &, Res &)>;
 std::function<void(const std::string&, const bool&)> StdToC::callback = nullptr;
-std::function<void(const Req&, Res&)> StdToC::handler = nullptr;
+ArnelifyServerHandler StdToC::handler = nullptr;
 
 #endif

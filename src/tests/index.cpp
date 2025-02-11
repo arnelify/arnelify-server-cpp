@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
 
   ArnelifyServer server(opts);
 
-  server.setHandler([](const Req& req, Res& res) {
+  server.setHandler([](const ArnelifyServerReq& req, ArnelifyServerRes& res) {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
     writer["emitUTF8"] = true;
