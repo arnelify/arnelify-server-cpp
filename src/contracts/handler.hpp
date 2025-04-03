@@ -7,15 +7,15 @@
 
 #include "json.h"
 
-using ArnelifyServerCallback =
+using ArnelifyServerLogger =
     std::function<void(const std::string&, const bool&)>;
 using ArnelifyServerReq = Json::Value;
 
 struct ArnelifyServerRes {
  private:
   Json::Value res;
-  ArnelifyServerCallback callback = [](const std::string& message,
-                                       const bool& isError) {
+  ArnelifyServerLogger logger = [](const std::string& message,
+                                   const bool& isError) {
     if (isError) {
       std::cout << "[Arnelify Server]: Error: " << message << std::endl;
       exit(1);
@@ -30,14 +30,14 @@ struct ArnelifyServerRes {
     this->res["code"] = 200;
     this->res["filePath"] = "";
     this->res["headers"] = Json::objectValue;
+    this->res["isStatic"] = false;
   }
 
   void addBody(const std::string& chunk) {
     const std::string filePath = this->res["filePath"].asString();
     const bool hasFile = !filePath.empty();
     if (hasFile) {
-      this->callback("Can't add body to a Response that contains a file.",
-                     true);
+      this->logger("Can't add body to a Response that contains a file.", true);
       exit(1);
     }
 
@@ -59,14 +59,9 @@ struct ArnelifyServerRes {
       this->res["isStatic"] = false;
       return;
     }
-
-    this->callback("Add the body or set the file.", true);
-    exit(1);
   }
 
-  void setCallback(const ArnelifyServerCallback& callback) {
-    this->callback = callback;
-  }
+  void setLogger(const ArnelifyServerLogger& logger) { this->logger = logger; }
 
   void setCode(const int& code) { this->res["code"] = code; }
 
@@ -74,7 +69,7 @@ struct ArnelifyServerRes {
     const std::string body = this->res["body"].asString();
     const bool hasBody = !body.empty();
     if (hasBody) {
-      this->callback(
+      this->logger(
           "Can't add an attachment to a Response that contains a body.", true);
       return;
     }
@@ -99,19 +94,19 @@ using ArnelifyServerHandler =
     std::function<void(const ArnelifyServerReq&, ArnelifyServerRes&)>;
 
 struct StdToC {
-  static std::function<void(const std::string&, const bool&)> callback;
+  static std::function<void(const std::string&, const bool&)> logger;
   static ArnelifyServerHandler handler;
 
-  void setStdCallback(const ArnelifyServerCallback& callback) {
-    StdToC::callback = callback;
+  void setStdLogger(const ArnelifyServerLogger& logger) {
+    StdToC::logger = logger;
   }
 
   void setStdHandler(const ArnelifyServerHandler& handler) {
     StdToC::handler = handler;
   }
 
-  static void cCallback(const char* cMessage, const int isError) {
-    callback(cMessage, isError);
+  static void cLogger(const char* cMessage, const int isError) {
+    logger(cMessage, isError);
   };
 
   static const char* cHandler(const char* cSerialized) {
@@ -137,7 +132,7 @@ struct StdToC {
   }
 };
 
-std::function<void(const std::string&, const bool&)> StdToC::callback = nullptr;
+std::function<void(const std::string&, const bool&)> StdToC::logger = nullptr;
 ArnelifyServerHandler StdToC::handler = nullptr;
 
 #endif

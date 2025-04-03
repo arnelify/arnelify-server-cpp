@@ -116,9 +116,9 @@ class ArnelifyServer {
     this->server_set_handler(StdToC::cHandler, 1);
   }
 
-  void start(const ArnelifyServerCallback &callback) {
-    stdtoc.setStdCallback(callback);
-    this->server_start(StdToC::cCallback);
+  void start(const ArnelifyServerLogger &logger) {
+    stdtoc.setStdLogger(logger);
+    this->server_start(StdToC::cLogger);
   }
 
   void stop() { this->server_stop(); }
