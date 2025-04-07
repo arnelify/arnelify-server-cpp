@@ -57,7 +57,6 @@ struct ArnelifyServerRes {
     if (hasBody) {
       this->res["filePath"] = "";
       this->res["isStatic"] = false;
-      return;
     }
   }
 

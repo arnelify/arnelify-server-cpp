@@ -21,11 +21,11 @@ int main(int argc, char* argv[]) {
   opts["SERVER_MAX_FILES_SIZE_TOTAL_MB"] = 60;
   opts["SERVER_MAX_FILE_SIZE_MB"] = 60;
   opts["SERVER_PORT"] = 3001;
+  opts["SERVER_THREAD_LIMIT"] = 16;
   opts["SERVER_QUEUE_LIMIT"] = 1024;
   opts["SERVER_UPLOAD_PATH"] = "./src/storage/upload";
 
   ArnelifyServer server(opts);
-
   server.setHandler([](const ArnelifyServerReq& req, ArnelifyServerRes& res) {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";

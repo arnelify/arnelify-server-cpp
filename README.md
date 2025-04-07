@@ -1,6 +1,6 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.6.5-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
+![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.7.3-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
 
 ## 🚀 About
 **Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful http-server written in C and C++.
@@ -60,6 +60,7 @@ You can find code examples <a href="https://github.com/arnelify/arnelify-server-
 | **SERVER_MAX_FILES_SIZE_TOTAL_MB** | Defines the maximum total size of all files in the form.|
 | **SERVER_MAX_FILE_SIZE_MB**| Defines the maximum size of a single file in the form.|
 | **SERVER_PORT**| Defines which port the server will listen on.|
+| **SERVER_THREAD_LIMIT**| Defines the maximum number of threads that will handle requests.|
 | **SERVER_QUEUE_LIMIT**| Defines the maximum size of the queue on the client socket.|
 | **SERVER_UPLOAD_DIR**| Specifies the upload directory for storage.|
 
@@ -71,18 +72,16 @@ Join us to help improve this software, fix bugs or implement new functionality. 
 
 
 ## ⭐ Release Notes
-Version 0.6.5 - Minimalistic dynamic library
+Version 0.7.3 - Minimalistic dynamic library
 
 We are excited to introduce the Arnelify Server for C++ dynamic library! Please note that this version is raw and still in active development.
 
 Change log:
 
-* Minimalistic dynamic library
-* NodeJS (Bun) addon
-* FFI Support
+* Multi-Threading
+* Minimalistic dynamic library for C++
 * Block processing in "on-the-fly" mode
 * GZIP support
-* Boost and Magic libraries have been removed
 * Significant refactoring and optimizations
 
 Please use this version with caution, as it may contain bugs and unfinished features. We are actively working on improving and expanding the server's capabilities, and we welcome your feedback and suggestions.
