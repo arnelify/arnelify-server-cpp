@@ -7,6 +7,7 @@
 **/.vscode/
 
 # Main
+include/*
 build/*
 
 # Docker

@@ -8,12 +8,12 @@ ENGINE_FLAGS = -std=c++2b
 
 # PATH
 PATH_BIN = $(CURDIR)/build/index.so
-PATH_SRC = $(CURDIR)/src/cpp/ffi.cpp
-PATH_TEST_BIN = $(CURDIR)/src/tests/bin/index
+PATH_SRC = $(CURDIR)/src/ffi.cpp
+PATH_TEST_BIN = $(CURDIR)/src/tests/build/index
 PATH_TEST_SRC = $(CURDIR)/src/tests/index.cpp
 
 # INC
-INC_CPP = -I $(CURDIR)/src/cpp
+INC_CPP = -I $(CURDIR)/src
 INC_INCLUDE = -L /usr/include
 INC_JSONCPP = -I /usr/include/jsoncpp/json
 
@@ -30,7 +30,7 @@ build:
 	${ENGINE_BUILD} ${ENGINE_FLAGS} ${INC} ${LINK} -fPIC -shared ${PATH_SRC} -o ${PATH_BIN}
 
 test:
-	clear && mkdir -p src/tests/bin && rm -rf src/tests/bin/*
+	clear && mkdir -p src/tests/build && rm -rf src/tests/build/*
 	${ENGINE_WATCH} $(ENGINE_FLAGS) $(PATH_TEST_SRC) ${INC} ${LINK} -o $(PATH_TEST_BIN) && $(PATH_TEST_BIN)
 
 .PHONY: build test

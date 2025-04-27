@@ -1,9 +1,9 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.7.4-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
+![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.7.5-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
 
 ## 🚀 About
-**Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful http-server written in C and C++.
+**Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful server written in C and C++.
 
 ## 📋 Minimal Requirements
 > Important: It's strongly recommended to use in a container that has been built from the gcc v14.2.0 image.
@@ -72,16 +72,17 @@ Join us to help improve this software, fix bugs or implement new functionality. 
 
 
 ## ⭐ Release Notes
-Version 0.7.4 - Minimalistic dynamic library
+Version 0.7.5 - Minimalistic dynamic library
 
 We are excited to introduce the Arnelify Server for C++ dynamic library! Please note that this version is raw and still in active development.
 
 Change log:
 
-* Multi-Threading
 * Minimalistic dynamic library for C++
 * Block processing in "on-the-fly" mode
+* Multi-Threading
 * GZIP support
+* FFI & Unix Domain Socket
 * Significant refactoring and optimizations
 
 Please use this version with caution, as it may contain bugs and unfinished features. We are actively working on improving and expanding the server's capabilities, and we welcome your feedback and suggestions.
