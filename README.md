@@ -1,6 +1,6 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.7.7-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
+![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.7.8-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-14.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-14.0.6-blue)
 
 ## 🚀 About
 **Arnelify® Server for C++** - is a minimalistic dynamic library which is a powerful server written in C and C++.
@@ -59,6 +59,7 @@ You can find code examples <a href="https://github.com/arnelify/arnelify-server-
 | **SERVER_MAX_FILES**| Defines the maximum number of files in the form.|
 | **SERVER_MAX_FILES_SIZE_TOTAL_MB** | Defines the maximum total size of all files in the form.|
 | **SERVER_MAX_FILE_SIZE_MB**| Defines the maximum size of a single file in the form.|
+| **SERVER_NET_CHECK_FREQ_MS**| Network interface check frequency in milliseconds. The lower the value, the higher the CPU load.|
 | **SERVER_PORT**| Defines which port the server will listen on.|
 | **SERVER_THREAD_LIMIT**| Defines the maximum number of threads that will handle requests.|
 | **SERVER_QUEUE_LIMIT**| Defines the maximum size of the queue on the client socket.|
@@ -72,7 +73,7 @@ Join us to help improve this software, fix bugs or implement new functionality. 
 
 
 ## ⭐ Release Notes
-Version 0.7.7 - Minimalistic dynamic library
+Version 0.7.8 - Minimalistic dynamic library
 
 We are excited to introduce the Arnelify Server for C++ dynamic library! Please note that this version is raw and still in active development.
 

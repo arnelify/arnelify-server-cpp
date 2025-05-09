@@ -8,8 +8,22 @@
 #include "../index.h"
 
 int main(int argc, char* argv[]) {
-  Http1Opts http1Opts(true, 64, "UTF-8", true, true, 1024, 20, 1, 60, 60, 3001,
-                      3, 1024, "./storage/upload");
+  Http1Opts http1Opts(
+      /* SERVER_ALLOW_EMPTY_FILES */ true,
+      /* SERVER_BLOCK_SIZE_KB */ 64,
+      /* SERVER_CHARSET */ "UTF-8",
+      /* SERVER_GZIP */ true,
+      /* SERVER_KEEP_EXTENSIONS */ true,
+      /* SERVER_MAX_FIELDS */ 1024,
+      /* SERVER_MAX_FIELDS_SIZE_TOTAL_MB */ 20,
+      /* SERVER_MAX_FILES */ 1,
+      /* SERVER_MAX_FILES_SIZE_TOTAL_MB */ 60,
+      /* SERVER_MAX_FILE_SIZE_MB */ 60,
+      /* SERVER_NET_CHECK_FREQ_MS */ 50,
+      /* SERVER_PORT */ 3001,
+      /* SERVER_THREAD_LIMIT */ 5,
+      /* SERVER_QUEUE_LIMIT */ 1024,
+      /* SERVER_UPLOAD_DIR */ "./storage/upload");
 
   Http1 http1(http1Opts);
   http1.handler([](const Http1Req& req, Http1Res res) {
