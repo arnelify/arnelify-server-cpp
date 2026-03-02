@@ -75,8 +75,7 @@ int main() {
   WebTransportHandler wt_handler = [](WebTransportCtx& ctx,
                                       WebTransportBytes& bytes,
                                       WebTransportStream& stream) -> void {
-    const WebTransportRes res = ctx;
-    stream.push_json(res);
+    stream.push(ctx, bytes);
     stream.close();
   };
 
@@ -203,8 +202,7 @@ int main() {
 
   WebSocketHandler ws_handler = [](WebSocketCtx& ctx, WebSocketBytes& bytes,
                                    WebSocketStream& stream) -> void {
-    const WebSocketRes res = ctx;
-    stream.push_json(res);
+    stream.push(ctx, bytes);
     stream.close();
   };
 

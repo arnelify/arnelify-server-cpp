@@ -27,8 +27,7 @@ int main() {
   WebTransportHandler wt_handler = [](WebTransportCtx& ctx,
                                       WebTransportBytes& bytes,
                                       WebTransportStream& stream) -> void {
-    const WebTransportRes res = ctx;
-    stream.push_json(res);
+    stream.push(ctx, bytes);
     stream.close();
   };
 
