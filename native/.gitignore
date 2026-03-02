@@ -7,15 +7,15 @@
 **/.vscode/
 
 # Main
-include/
 build/
+certs/
 
 # Docker
 # /*.dockerfile
 # /*.yml
 
-# Make
-include/
+# Cargo
+target/
 
 # Misc
 **/.DS_Store
