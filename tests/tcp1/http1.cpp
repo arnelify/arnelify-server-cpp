@@ -12,7 +12,7 @@ int main() {
       /* keep_alive */ 30,
       /* keep_extensions */ true,
       /* max_fields*/ 60,
-      /* max_fields_size_total_mb */ 60,
+      /* max_fields_size_total_mb */ 1,
       /* max_files */ 1,
       /* max_files_size_total_mb */ 60,
       /* max_file_size_mb */ 60,
@@ -21,13 +21,12 @@ int main() {
       /* thread_limit */ 4);
 
   Http1 http1(opts);
-  Http1Logger http1_logger = [](const std::string& level,
+  Http1Logger http1_logger = [](const std::string& _level,
                                 const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   http1.logger(http1_logger);
-
   Http1Handler http1_handler = [](Http1Req& ctx, Http1Stream& stream) -> void {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
@@ -37,7 +36,7 @@ int main() {
     const Http1Res bytes(res.begin(), res.end());
 
     stream.set_code(200);
-    stream.push_bytes(bytes);
+    stream.push_bytes(bytes, false);
     stream.end();
   };
 

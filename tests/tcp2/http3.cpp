@@ -14,7 +14,7 @@ int main() {
       /* keep_extensions */ true,
       /* key_pem */ "certs/key.pem",
       /* max_fields*/ 60,
-      /* max_fields_size_total_mb */ 60,
+      /* max_fields_size_total_mb */ 1,
       /* max_files */ 1,
       /* max_files_size_total_mb */ 60,
       /* max_file_size_mb */ 60,
@@ -23,13 +23,12 @@ int main() {
       /* thread_limit */ 4);
 
   Http3 http3(opts);
-  Http3Logger http3_logger = [](const std::string& level,
+  Http3Logger http3_logger = [](const std::string& _level,
                                 const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   http3.logger(http3_logger);
-
   Http3Handler http3_handler = [](Http3Req& ctx, Http3Stream& stream) -> void {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
@@ -39,7 +38,7 @@ int main() {
     const Http1Res bytes(res.begin(), res.end());
 
     stream.set_code(200);
-    stream.push_bytes(bytes);
+    stream.push_bytes(bytes, false);
     stream.end();
   };
 

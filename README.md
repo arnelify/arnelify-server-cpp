@@ -1,6 +1,6 @@
 <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 
-![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.9.3-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-15.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-19.1.7-blue)
+![Arnelify Server for C++](https://img.shields.io/badge/Arnelify%20Server%20for%20C++-0.9.6-yellow) ![C++](https://img.shields.io/badge/C++-2b-red) ![G++](https://img.shields.io/badge/G++-15.2.0-blue) ![C-Lang](https://img.shields.io/badge/CLang-19.1.7-blue)
 
 ## 🚀 About
 
@@ -55,17 +55,17 @@ int main() {
   WebTransportOpts opts(
       /* block_size_kb */ 64,
       /* cert_pem */ "certs/cert.pem",
-      /* compression */ true,
+      /* compression */ false,
       /* handshake_timeout */ 30,
       /* key_pem */ "certs/key.pem",
-      /* max_message_size_kb */ 60,
-      /* ping_timeout */ 30,
+      /* max_message_size_kb */ 64,
+      /* ping_timeout */ 15,
       /* port */ 4433,
       /* send_timeout */ 30,
       /* thread_limit */ 4);
 
   WebTransport wt(opts);
-  WebTransportLogger wt_logger = [](const std::string& level,
+  WebTransportLogger wt_logger = [](const std::string& _level,
                                     const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
@@ -125,7 +125,7 @@ int main() {
       /* key_pem */ "certs/key.pem",
       /* max_fields*/ 60,
       /* max_fields_size_total_mb */ 1,
-      /* max_files */ 3,
+      /* max_files */ 1,
       /* max_files_size_total_mb */ 60,
       /* max_file_size_mb */ 60,
       /* port */ 4433,
@@ -133,13 +133,12 @@ int main() {
       /* thread_limit */ 4);
 
   Http3 http3(opts);
-  Http3Logger http3_logger = [](const std::string& level,
+  Http3Logger http3_logger = [](const std::string& _level,
                                 const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   http3.logger(http3_logger);
-
   Http3Handler http3_handler = [](Http3Req& ctx, Http3Stream& stream) -> void {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
@@ -149,7 +148,7 @@ int main() {
     const Http1Res bytes(res.begin(), res.end());
 
     stream.set_code(200);
-    stream.push_bytes(bytes);
+    stream.push_bytes(bytes, false);
     stream.end();
   };
 
@@ -184,22 +183,21 @@ int main() {
 int main() {
   WebSocketOpts opts(
       /* block_size_kb */ 64,
-      /* compression */ true,
+      /* compression */ false,
       /* handshake_timeout */ 30,
       /* max_message_size_kb */ 64,
-      /* ping_timeout */ 30,
+      /* ping_timeout */ 15,
       /* port */ 4433,
       /* send_timeout */ 30,
       /* thread_limit */ 4);
 
   WebSocket ws(opts);
-  WebSocketLogger ws_logger = [](const std::string& level,
+  WebSocketLogger ws_logger = [](const std::string& _level,
                                  const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   ws.logger(ws_logger);
-
   WebSocketHandler ws_handler = [](WebSocketCtx& ctx, WebSocketBytes& bytes,
                                    WebSocketStream& stream) -> void {
     stream.push(ctx, bytes);
@@ -253,7 +251,7 @@ int main() {
       /* key_pem */ "certs/key.pem",
       /* max_fields*/ 60,
       /* max_fields_size_total_mb */ 1,
-      /* max_files */ 3,
+      /* max_files */ 1,
       /* max_files_size_total_mb */ 60,
       /* max_file_size_mb */ 60,
       /* port */ 4433,
@@ -261,13 +259,12 @@ int main() {
       /* thread_limit */ 4);
 
   Http2 http2(opts);
-  Http2Logger http2_logger = [](const std::string& level,
+  Http2Logger http2_logger = [](const std::string& _level,
                                 const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   http2.logger(http2_logger);
-
   Http2Handler http2_handler = [](Http2Req& ctx, Http2Stream& stream) -> void {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
@@ -277,7 +274,7 @@ int main() {
     const Http1Res bytes(res.begin(), res.end());
 
     stream.set_code(200);
-    stream.push_bytes(bytes);
+    stream.push_bytes(bytes, false);
     stream.end();
   };
 
@@ -324,7 +321,7 @@ int main() {
       /* keep_extensions */ true,
       /* max_fields*/ 60,
       /* max_fields_size_total_mb */ 1,
-      /* max_files */ 3,
+      /* max_files */ 1,
       /* max_files_size_total_mb */ 60,
       /* max_file_size_mb */ 60,
       /* port */ 4433,
@@ -332,13 +329,12 @@ int main() {
       /* thread_limit */ 4);
 
   Http1 http1(opts);
-  Http1Logger http1_logger = [](const std::string& level,
+  Http1Logger http1_logger = [](const std::string& _level,
                                 const std::string& message) -> void {
     std::cout << "[Arnelify Server]: " << message << std::endl;
   };
 
   http1.logger(http1_logger);
-
   Http1Handler http1_handler = [](Http1Req& ctx, Http1Stream& stream) -> void {
     Json::StreamWriterBuilder writer;
     writer["indentation"] = "";
@@ -348,7 +344,7 @@ int main() {
     const Http1Res bytes(res.begin(), res.end());
 
     stream.set_code(200);
-    stream.push_bytes(bytes);
+    stream.push_bytes(bytes, false);
     stream.end();
   };
 
@@ -363,6 +359,13 @@ This software is licensed under the <a href="https://github.com/arnelify/arnelif
 ## 🛠️ Contributing
 Join us to help improve this software, fix bugs or implement new functionality. Active participation will help keep the software up-to-date, reliable, and aligned with the needs of its users.
 
+VSCode Configs (optional):
+```json
+"includePath": [
+  "/opt/homebrew/Cellar/jsoncpp/1.9.6/include/json",
+  "${workspaceFolder}/src"
+],
+```
 Run in terminal:
 ```bash
 docker compose up -d --build
@@ -392,7 +395,7 @@ make test_http1
 ```
 
 ## ⭐ Release Notes
-Version 0.9.3 — a multi-language server with HTTP 3.0 and WebTransport support.
+Version 0.9.6 — a multi-language server with HTTP 3.0 and WebTransport support.
 
 We are excited to introduce the Arnelify Server for NodeJS! Please note that this version is raw and still in active development.
 

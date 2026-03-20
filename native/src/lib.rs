@@ -20,6 +20,455 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+//! <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
+//!
+//! ![Arnelify Server for Rust](https://img.shields.io/badge/Arnelify%20Server%20for%20Rust-0.9.6-yellow)
+//! ![Rust](https://img.shields.io/badge/Rust-1.91.1-orange)
+//! ![Cargo](https://img.shields.io/badge/Cargo-1.91.1-blue)
+//!
+//! # About
+//! **Arnelify® Server for Rust** — a multi-language server with HTTP 3.0 and WebTransport support.
+//!
+//! All supported protocols:
+//! | **#** | **Protocol** | **Transport** |
+//! | - | - | - |
+//! | 1 | TCP1 | HTTP 1.1 |
+//! | 2 | TCP1 | HTTP 2.0 |
+//! | 3 | TCP1 | WebSocket |
+//! | 4 | TCP2 | HTTP 3.0 |
+//! | 5 | TCP2 | WebTransport |
+//!
+//! ## Minimal Requirements
+//! Important: It's strongly recommended to use in a container that has been built from the gcc v15.2.0 image.
+//! * CPU: Apple M1 / Intel Core i7 / AMD Ryzen 7
+//! * OS: Debian 11 / MacOS 15 / Windows 10 with <a href="https://learn.microsoft.com/en-us/windows/wsl/install">WSL2</a>.
+//! * RAM: 4 GB
+//!
+//! ## Installation
+//! Run in terminal:
+//! ```bash
+//! cargo add arnelify_server
+//! ```
+//!
+//! # TCP2 / WebTransport
+//! **WebTransport** - is a modern protocol for low-latency, bidirectional data transfer in browsers and applications. It works over Next Generation HTTP 3.0 and Next Generation TCP2 (QUIC), allowing multiple streams and messages in parallel.
+//!
+//! ## Configuration
+//!
+//! | **Option** | **Description** |
+//! | - | - |
+//! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
+//! | **CERT_PEM**| Path to the TLS cert-file in PEM format. |
+//! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **HANDSHAKE_TIMEOUT**| Maximum time in seconds to complete the TLS handshake. |
+//! | **KEY_PEM**| Path to the TLS private key-file in PEM format. |
+//! | **MAX_MESSAGE_SIZE_MB**| Maximum size of a single message the server will accept from a client. |
+//! | **PING_TIMEOUT**| Maximum time the server will wait for a ping from the client. |
+//! | **PORT**| Defines which port the server will listen on. |
+//! | **SEND_TIMEOUT**| Maximum time for the client to receive a response from the server. |
+//! | **THREAD_LIMIT**| Defines the maximum number of threads that will handle requests.|
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use arnelify_server::tcp2::WebTransport;
+//! use arnelify_server::tcp2::WebTransportBytes;
+//! use arnelify_server::tcp2::WebTransportCtx;
+//! use arnelify_server::tcp2::WebTransportHandler;
+//! use arnelify_server::tcp2::WebTransportLogger;
+//! use arnelify_server::tcp2::WebTransportOpts;
+//! use arnelify_server::tcp2::WebTransportStream;
+//! use std::sync::{Arc, Mutex};
+//!
+//! type JSON = serde_json::Value;
+//!
+//! fn main() {
+//!   let wt_opts: WebTransportOpts = WebTransportOpts {
+//!     block_size_kb: 64,
+//!     cert_pem: String::from("certs/cert.pem"),
+//!     compression: false,
+//!     handshake_timeout: 30,
+//!     key_pem: String::from("certs/key.pem"),
+//!     max_message_size_kb: 64,
+//!     ping_timeout: 15,
+//!     port: 4433,
+//!     send_timeout: 30,
+//!     thread_limit: 4,
+//!   };
+//!
+//!   let wt: WebTransport = WebTransport::new(wt_opts);
+//!   let wt_logger: Arc<WebTransportLogger> = Arc::new(move |_level: &str, message: &str| {
+//!     println!("[Arnelify Server]: {}", message);
+//!   });
+//!
+//!   wt.logger(wt_logger);
+//!   let wt_handler: Arc<WebTransportHandler> = Arc::new(
+//!     move |ctx: Arc<Mutex<WebTransportCtx>>,
+//!           bytes: Arc<Mutex<WebTransportBytes>>,
+//!           stream: Arc<Mutex<WebTransportStream>>| {
+//!       let json: JSON = ctx.lock().unwrap().clone();
+//!       let bytes: Vec<u8> = bytes.lock().unwrap().clone();
+//!       let mut stream_lock: std::sync::MutexGuard<'_, WebTransportStream> = stream.lock().unwrap();
+//!       stream_lock.push(&json, &bytes);
+//!       stream_lock.close();
+//!     },
+//!   );
+//!
+//!   wt.on("connect", wt_handler);
+//!   wt.start();
+//! }
+//! ```
+//!
+//! # TCP2 / HTTP 3.0
+//! **HTTP 3.0** - is the latest version of the HTTP protocol, built on top of Next Generation TCP2 (QUIC) instead of TCP1. It provides faster and more reliable connections by reducing handshake latency and improving packet loss recovery.
+//!
+//! ## Configuration
+//!
+//! | **Option** | **Description** |
+//! | - | - |
+//! | **ALLOW_EMPTY_FILES**| If this option is enabled, the server will not reject empty files. |
+//! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
+//! | **CERT_PEM**| Path to the TLS cert-file in PEM format. |
+//! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
+//! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
+//! | **KEY_PEM**| Path to the TLS private key-file in PEM format. |
+//! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
+//! | **MAX_FIELDS_SIZE_TOTAL_MB**| Defines the maximum total size of all fields in the form. This option does not include file sizes. |
+//! | **MAX_FILES**| Defines the maximum number of files in the form. |
+//! | **MAX_FILES_SIZE_TOTAL_MB** | Defines the maximum total size of all files in the form. |
+//! | **MAX_FILE_SIZE_MB**| Defines the maximum size of a single file in the form. |
+//! | **PORT**| Defines which port the server will listen on. |
+//! | **STORAGE_PATH**| Specifies the upload directory for storage. |
+//! | **THREAD_LIMIT**| Defines the maximum number of threads that will handle requests. |
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use arnelify_server::tcp2::Http3;
+//! use arnelify_server::tcp2::Http3Ctx;
+//! use arnelify_server::tcp2::Http3Handler;
+//! use arnelify_server::tcp2::Http3Logger;
+//! use arnelify_server::tcp2::Http3Opts;
+//! use arnelify_server::tcp2::Http3Stream;
+//! use std::sync::{Arc, Mutex};
+//!
+//! type JSON = serde_json::Value;
+//!
+//! fn main() {
+//!   let http3_opts: Http3Opts = Http3Opts {
+//!     allow_empty_files: true,
+//!     block_size_kb: 64,
+//!     cert_pem: String::from("certs/cert.pem"),
+//!     charset: String::from("utf-8"),
+//!     compression: true,
+//!     keep_alive: 30,
+//!     keep_extensions: true,
+//!     key_pem: String::from("certs/key.pem"),
+//!     max_fields: 60,
+//!     max_fields_size_total_mb: 1,
+//!     max_files: 1,
+//!     max_files_size_total_mb: 60,
+//!     max_file_size_mb: 60,
+//!     port: 4433,
+//!     storage_path: String::from("/var/www/rust/storage"),
+//!     thread_limit: 4,
+//!   };
+//!
+//!   let http3: Http3 = Http3::new(http3_opts);
+//!   let http3_logger: Arc<Http3Logger> = Arc::new(move |_level: &str, message: &str| {
+//!     println!("[Arnelify Server]: {}", message);
+//!   });
+//!
+//!   http3.logger(http3_logger);
+//!   let http3_handler: Arc<Http3Handler> = Arc::new(
+//!     move |ctx: Arc<Mutex<Http3Ctx>>, stream: Arc<Mutex<Http3Stream>>| {
+//!       let json: JSON = ctx.lock().unwrap().clone();
+//!       let mut stream_lock: std::sync::MutexGuard<'_, Http3Stream> = stream.lock().unwrap();
+//!       stream_lock.set_code(200);
+//!       stream_lock.push_json(&json, false);
+//!       stream_lock.end();
+//!     },
+//!   );
+//!
+//!   http3.on("/", http3_handler);
+//!   http3.start();
+//! }
+//! ```
+//!
+//! # TCP1 / WebSocket
+//! **WebSocket** - is a protocol that enables full-duplex, bidirectional communication between a client and server over a single TCP1 connection.
+//!
+//! ## Configuration
+//!
+//! | **Option** | **Description** |
+//! | - | - |
+//! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
+//! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **HANDSHAKE_TIMEOUT**| Maximum time in seconds to complete the TLS handshake. |
+//! | **MAX_MESSAGE_SIZE_MB**| Maximum size of a single message the server will accept from a client. |
+//! | **PING_TIMEOUT**| Maximum time the server will wait for a ping from the client. |
+//! | **PORT**| Defines which port the server will listen on. |
+//! | **SEND_TIMEOUT**| Maximum time for the client to receive a response from the server. |
+//! | **THREAD_LIMIT**| Defines the maximum number of threads that will handle requests.|
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use arnelify_server::tcp1::WebSocket;
+//! use arnelify_server::tcp1::WebSocketBytes;
+//! use arnelify_server::tcp1::WebSocketCtx;
+//! use arnelify_server::tcp1::WebSocketHandler;
+//! use arnelify_server::tcp1::WebSocketLogger;
+//! use arnelify_server::tcp1::WebSocketOpts;
+//! use arnelify_server::tcp1::WebSocketStream;
+//! use std::sync::{Arc, Mutex};
+//!
+//! type JSON = serde_json::Value;
+//!
+//! fn main() {
+//!   let ws_opts: WebSocketOpts = WebSocketOpts {
+//!     block_size_kb: 64,
+//!     compression: false,
+//!     handshake_timeout: 30,
+//!     max_message_size_kb: 64,
+//!     ping_timeout: 15,
+//!     port: 4433,
+//!     send_timeout: 30,
+//!     thread_limit: 4,
+//!   };
+//!
+//!   let ws: WebSocket = WebSocket::new(ws_opts);
+//!   let ws_logger: Arc<WebSocketLogger> = Arc::new(move |_level: &str, message: &str| {
+//!     println!("[Arnelify Server]: {}", message);
+//!   });
+//!
+//!   ws.logger(ws_logger);
+//!   let ws_handler: Arc<WebSocketHandler> = Arc::new(
+//!     move |ctx: Arc<Mutex<WebSocketCtx>>,
+//!           bytes: Arc<Mutex<WebSocketBytes>>,
+//!           stream: Arc<Mutex<WebSocketStream>>| {
+//!       let json: JSON = ctx.lock().unwrap().clone();
+//!       let bytes: Vec<u8> = bytes.lock().unwrap().clone();
+//!       let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> = stream.lock().unwrap();
+//!       stream_lock.push(&json, &bytes);
+//!       stream_lock.close();
+//!     },
+//!   );
+//!
+//!   ws.on("connect", ws_handler);
+//!   ws.start();
+//! }
+//! ```
+//!
+//! # TCP1 / HTTP 2.0
+//! **HTTP 2.0** - is a revision of the HTTP protocol that improves performance over HTTP 1.1. It introduces multiplexed streams, allowing multiple requests and responses to be sent over a single TCP1 connection simultaneously.
+//!
+//! ## Configuration
+//!
+//! | **Option** | **Description** |
+//! | - | - |
+//! | **ALLOW_EMPTY_FILES**| If this option is enabled, the server will not reject empty files. |
+//! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
+//! | **CERT_PEM**| Path to the TLS cert-file in PEM format. |
+//! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
+//! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
+//! | **KEY_PEM**| Path to the TLS private key-file in PEM format. |
+//! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
+//! | **MAX_FIELDS_SIZE_TOTAL_MB**| Defines the maximum total size of all fields in the form. This option does not include file sizes. |
+//! | **MAX_FILES**| Defines the maximum number of files in the form. |
+//! | **MAX_FILES_SIZE_TOTAL_MB** | Defines the maximum total size of all files in the form. |
+//! | **MAX_FILE_SIZE_MB**| Defines the maximum size of a single file in the form. |
+//! | **PORT**| Defines which port the server will listen on. |
+//! | **STORAGE_PATH**| Specifies the upload directory for storage. |
+//! | **THREAD_LIMIT**| Defines the maximum number of threads that will handle requests. |
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use arnelify_server::tcp1::Http2;
+//! use arnelify_server::tcp1::Http2Ctx;
+//! use arnelify_server::tcp1::Http2Handler;
+//! use arnelify_server::tcp1::Http2Logger;
+//! use arnelify_server::tcp1::Http2Opts;
+//! use arnelify_server::tcp1::Http2Stream;
+//! use std::sync::{Arc, Mutex};
+//!
+//! type JSON = serde_json::Value;
+//!
+//! fn main() {
+//!   let http2_opts: Http2Opts = Http2Opts {
+//!     allow_empty_files: true,
+//!     block_size_kb: 64,
+//!     cert_pem: String::from("certs/cert.pem"),
+//!     charset: String::from("utf-8"),
+//!     compression: true,
+//!     keep_alive: 30,
+//!     keep_extensions: true,
+//!     key_pem: String::from("certs/key.pem"),
+//!     max_fields: 60,
+//!     max_fields_size_total_mb: 1,
+//!     max_files: 1,
+//!     max_files_size_total_mb: 60,
+//!     max_file_size_mb: 60,
+//!     port: 4433,
+//!     storage_path: String::from("/var/www/rust/storage"),
+//!     thread_limit: 4,
+//!   };
+//!
+//!   let http2: Http2 = Http2::new(http2_opts);
+//!   let http2_logger: Arc<Http2Logger> = Arc::new(move |_level: &str, message: &str| {
+//!     println!("[Arnelify Server]: {}", message);
+//!   });
+//!
+//!   http2.logger(http2_logger);
+//!   let http2_handler: Arc<Http2Handler> = Arc::new(
+//!     move |ctx: Arc<Mutex<Http2Ctx>>, stream: Arc<Mutex<Http2Stream>>| {
+//!       let json: JSON = ctx.lock().unwrap().clone();
+//!       let mut stream_lock: std::sync::MutexGuard<'_, Http2Stream> = stream.lock().unwrap();
+//!       stream_lock.set_code(200);
+//!       stream_lock.push_json(&json, false);
+//!       stream_lock.end();
+//!     },
+//!   );
+//!
+//!   http2.on("/", http2_handler);
+//!   http2.start();
+//! }
+//! ```
+//!
+//! # TCP1 / HTTP 1.1
+//! **HTTP 1.1** - is a widely used version of the HTTP protocol that relies on TCP1 connections for communication.
+//!
+//! ## Configuration
+//!
+//! | **Option** | **Description** |
+//! | - | - |
+//! | **ALLOW_EMPTY_FILES**| If this option is enabled, the server will not reject empty files. |
+//! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
+//! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
+//! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
+//! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
+//! | **MAX_FIELDS_SIZE_TOTAL_MB**| Defines the maximum total size of all fields in the form. This option does not include file sizes. |
+//! | **MAX_FILES**| Defines the maximum number of files in the form. |
+//! | **MAX_FILES_SIZE_TOTAL_MB** | Defines the maximum total size of all files in the form. |
+//! | **MAX_FILE_SIZE_MB**| Defines the maximum size of a single file in the form. |
+//! | **PORT**| Defines which port the server will listen on. |
+//! | **STORAGE_PATH**| Specifies the upload directory for storage. |
+//! | **THREAD_LIMIT**| Defines the maximum number of threads that will handle requests. |
+//!
+//! ## Examples
+//!
+//! ```rust
+//! use arnelify_server::tcp1::Http1;
+//! use arnelify_server::tcp1::Http1Ctx;
+//! use arnelify_server::tcp1::Http1Handler;
+//! use arnelify_server::tcp1::Http1Logger;
+//! use arnelify_server::tcp1::Http1Opts;
+//! use arnelify_server::tcp1::Http1Stream;
+//! use std::sync::{Arc, Mutex};
+//!
+//! type JSON = serde_json::Value;
+//!
+//! fn main() {
+//!   let http1_opts: Http1Opts = Http1Opts {
+//!     allow_empty_files: true,
+//!     block_size_kb: 64,
+//!     charset: String::from("utf-8"),
+//!     compression: true,
+//!     keep_alive: 30,
+//!     keep_extensions: true,
+//!     max_fields: 60,
+//!     max_fields_size_total_mb: 1,
+//!     max_files: 1,
+//!     max_files_size_total_mb: 60,
+//!     max_file_size_mb: 60,
+//!     port: 4433,
+//!     storage_path: String::from("/var/www/rust/storage"),
+//!     thread_limit: 4,
+//!   };
+//!
+//!   let http1: Http1 = Http1::new(http1_opts);
+//!   let http1_logger: Arc<Http1Logger> = Arc::new(move |_level: &str, message: &str| {
+//!     println!("[Arnelify Server]: {}", message);
+//!   });
+//!
+//!   http1.logger(http1_logger);
+//!   let http1_handler: Arc<Http1Handler> = Arc::new(
+//!     move |ctx: Arc<Mutex<Http1Ctx>>, stream: Arc<Mutex<Http1Stream>>| {
+//!       let json: JSON = ctx.lock().unwrap().clone();
+//!       let mut stream_lock: std::sync::MutexGuard<'_, Http1Stream> = stream.lock().unwrap();
+//!       stream_lock.set_code(200);
+//!       stream_lock.push_json(&json, false);
+//!       stream_lock.end();
+//!     },
+//!   );
+//!
+//!   http1.on("/", http1_handler);
+//!   http1.start();
+//! }
+//! ```
+//!
+//! # MIT License
+//!
+//! This software is licensed under the <a href="https://github.com/arnelify/arnelify-server-rust/blob/main/LICENSE">MIT License</a>. The original author's name, logo, and the original name of the software must be included in all copies or substantial portions of the software.
+//!
+//! # Contributing
+//!
+//! Join us to help improve this software, fix bugs or implement new functionality. Active participation will help keep the software up-to-date, reliable, and aligned with the needs of its users.
+//!
+//! Run in terminal:
+//! ```bash
+//! docker compose up -d --build
+//! docker ps
+//! docker exec -it <CONTAINER ID> bash
+//! ```
+//! For TCP2 / WebTransport:
+//! ```bash
+//! cargo run --bin test_wt
+//! ```
+//! For TCP2 / HTTP 3.0:
+//! ```bash
+//! cargo run --bin test_http3
+//! ```
+//! For TCP1 / WebSocket:
+//! ```bash
+//! cargo run --bin test_ws
+//! ```
+//! For TCP1 / HTTP 2.0:
+//! ```bash
+//! cargo run --bin test_http2
+//! ```
+//! For TCP1 / HTTP 1.1:
+//! ```bash
+//! cargo run --bin test_http1
+//! ```
+//! # Release Notes
+//!
+//! Version 0.9.6 — a multi-language server with HTTP 3.0 and WebTransport support.
+//!
+//! We are excited to introduce the Arnelify Server for Rust! Please note that this version is raw and still in active development.
+//!
+//! Change Log:
+//!
+//! * Async Multi-Threading.
+//! * Block processing in "on-the-fly" mode.
+//! * BROTLI compression (still in development).
+//! * FFI, PYO3 and NEON support.
+//! * Significant refactoring and optimizations.
+//!
+//! Please use this version with caution, as it may contain bugs and unfinished features. We are actively working on improving and expanding the server's capabilities, and we welcome your feedback and suggestions.
+//!
+//! # Links
+//!
+//! * <a href="https://github.com/arnelify/arnelify-pod-cpp">Arnelify POD for C++</a>
+//! * <a href="https://github.com/arnelify/arnelify-pod-node">Arnelify POD for NodeJS</a>
+//! * <a href="https://github.com/arnelify/arnelify-pod-python">Arnelify POD for Python</a>
+//! * <a href="https://github.com/arnelify/arnelify-pod-rust">Arnelify POD for Rust</a>
+//! * <a href="https://github.com/arnelify/arnelify-react-native">Arnelify React Native</a>
+
 pub mod tcp1;
 pub mod tcp2;
 
@@ -156,8 +605,12 @@ pub extern "C" fn http1_add_header(
   c_value: *const c_char,
 ) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let key: &str = match unsafe { CStr::from_ptr(c_key) }.to_str() {
           Ok(s) => s,
@@ -250,8 +703,12 @@ pub extern "C" fn http1_destroy(c_id: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http1_end(c_stream_id: c_int) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http1Stream> = stream.lock().unwrap();
         stream_lock.end();
@@ -327,8 +784,12 @@ pub extern "C" fn http1_push_bytes(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         if c_bytes.is_null() || 0 >= c_bytes_len {
@@ -356,8 +817,12 @@ pub extern "C" fn http1_push_file(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let file_path: &str = match unsafe { CStr::from_ptr(c_file_path) }.to_str() {
@@ -388,8 +853,12 @@ pub extern "C" fn http1_push_json(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
@@ -424,8 +893,12 @@ pub extern "C" fn http1_push_json(
 #[unsafe(no_mangle)]
 pub extern "C" fn http1_set_code(c_stream_id: c_int, c_code: c_int) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http1Stream> = stream.lock().unwrap();
         stream_lock.set_code(c_code as u16);
@@ -441,8 +914,12 @@ pub extern "C" fn http1_set_code(c_stream_id: c_int, c_code: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http1_set_compression(c_stream_id: c_int, c_compression: *const c_char) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let compression: &str = match unsafe { CStr::from_ptr(c_compression) }.to_str() {
           Ok(s) => s,
@@ -473,8 +950,12 @@ pub extern "C" fn http1_set_compression(c_stream_id: c_int, c_compression: *cons
 #[unsafe(no_mangle)]
 pub extern "C" fn http1_set_headers(c_stream_id: c_int, c_headers: *const c_char) {
   if let Some(map) = HTTP1_STREAMS.get() {
-    let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http1Stream>>> = {
+      let streams: MutexGuard<'_, Http1Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: Vec<JSON> = match unsafe { CStr::from_ptr(c_headers) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -538,7 +1019,6 @@ pub extern "C" fn http1_stop(c_id: c_int) {
   }
 }
 
-
 #[unsafe(no_mangle)]
 pub extern "C" fn http2_add_header(
   c_stream_id: c_int,
@@ -546,8 +1026,12 @@ pub extern "C" fn http2_add_header(
   c_value: *const c_char,
 ) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let key: &str = match unsafe { CStr::from_ptr(c_key) }.to_str() {
           Ok(s) => s,
@@ -642,8 +1126,12 @@ pub extern "C" fn http2_destroy(c_id: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http2_end(c_stream_id: c_int) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http2Stream> = stream.lock().unwrap();
         stream_lock.end();
@@ -719,8 +1207,12 @@ pub extern "C" fn http2_push_bytes(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         if c_bytes.is_null() || 0 >= c_bytes_len {
@@ -748,8 +1240,12 @@ pub extern "C" fn http2_push_file(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let file_path: &str = match unsafe { CStr::from_ptr(c_file_path) }.to_str() {
@@ -780,8 +1276,12 @@ pub extern "C" fn http2_push_json(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
@@ -816,8 +1316,12 @@ pub extern "C" fn http2_push_json(
 #[unsafe(no_mangle)]
 pub extern "C" fn http2_set_code(c_stream_id: c_int, c_code: c_int) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http2Stream> = stream.lock().unwrap();
         stream_lock.set_code(c_code as u16);
@@ -833,8 +1337,12 @@ pub extern "C" fn http2_set_code(c_stream_id: c_int, c_code: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http2_set_compression(c_stream_id: c_int, c_compression: *const c_char) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let compression: &str = match unsafe { CStr::from_ptr(c_compression) }.to_str() {
           Ok(s) => s,
@@ -865,8 +1373,12 @@ pub extern "C" fn http2_set_compression(c_stream_id: c_int, c_compression: *cons
 #[unsafe(no_mangle)]
 pub extern "C" fn http2_set_headers(c_stream_id: c_int, c_headers: *const c_char) {
   if let Some(map) = HTTP2_STREAMS.get() {
-    let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http2Stream>>> = {
+      let streams: MutexGuard<'_, Http2Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: Vec<JSON> = match unsafe { CStr::from_ptr(c_headers) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -915,8 +1427,12 @@ pub extern "C" fn http2_set_headers(c_stream_id: c_int, c_headers: *const c_char
 #[unsafe(no_mangle)]
 pub extern "C" fn ws_close(c_stream_id: c_int) {
   if let Some(map) = WS_STREAMS.get() {
-    let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream = {
+      let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> = stream.lock().unwrap();
         stream_lock.close();
@@ -1058,8 +1574,12 @@ pub extern "C" fn ws_push(
   c_bytes_len: c_int,
 ) {
   if let Some(map) = WS_STREAMS.get() {
-    let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebSocketStream>>> = {
+      let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -1094,8 +1614,12 @@ pub extern "C" fn ws_push(
 #[unsafe(no_mangle)]
 pub extern "C" fn ws_push_bytes(c_stream_id: c_int, c_bytes: *const c_char, c_bytes_len: c_int) {
   if let Some(map) = WS_STREAMS.get() {
-    let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebSocketStream>>> = {
+      let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let bytes: &[u8] = if c_bytes.is_null() || c_bytes_len <= 0 {
           &[]
@@ -1116,8 +1640,12 @@ pub extern "C" fn ws_push_bytes(c_stream_id: c_int, c_bytes: *const c_char, c_by
 #[unsafe(no_mangle)]
 pub extern "C" fn ws_push_json(c_stream_id: c_int, c_json: *const c_char) {
   if let Some(map) = WS_STREAMS.get() {
-    let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebSocketStream>>> = {
+      let streams: MutexGuard<'_, WebSocketStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -1190,8 +1718,12 @@ pub extern "C" fn http3_add_header(
   c_value: *const c_char,
 ) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let key: &str = match unsafe { CStr::from_ptr(c_key) }.to_str() {
           Ok(s) => s,
@@ -1286,8 +1818,12 @@ pub extern "C" fn http3_destroy(c_id: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http3_end(c_stream_id: c_int) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http3Stream> = stream.lock().unwrap();
         stream_lock.end();
@@ -1363,8 +1899,12 @@ pub extern "C" fn http3_push_bytes(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         if c_bytes.is_null() || 0 >= c_bytes_len {
@@ -1392,8 +1932,12 @@ pub extern "C" fn http3_push_file(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let file_path: &str = match unsafe { CStr::from_ptr(c_file_path) }.to_str() {
@@ -1424,8 +1968,12 @@ pub extern "C" fn http3_push_json(
   c_is_attachment: c_int,
 ) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let is_attachment: bool = c_is_attachment == 1;
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
@@ -1460,8 +2008,12 @@ pub extern "C" fn http3_push_json(
 #[unsafe(no_mangle)]
 pub extern "C" fn http3_set_code(c_stream_id: c_int, c_code: c_int) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, Http3Stream> = stream.lock().unwrap();
         stream_lock.set_code(c_code as u16);
@@ -1477,8 +2029,12 @@ pub extern "C" fn http3_set_code(c_stream_id: c_int, c_code: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn http3_set_compression(c_stream_id: c_int, c_compression: *const c_char) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let compression: &str = match unsafe { CStr::from_ptr(c_compression) }.to_str() {
           Ok(s) => s,
@@ -1509,8 +2065,12 @@ pub extern "C" fn http3_set_compression(c_stream_id: c_int, c_compression: *cons
 #[unsafe(no_mangle)]
 pub extern "C" fn http3_set_headers(c_stream_id: c_int, c_headers: *const c_char) {
   if let Some(map) = HTTP3_STREAMS.get() {
-    let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<Http3Stream>>> = {
+      let streams: MutexGuard<'_, Http3Streams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: Vec<JSON> = match unsafe { CStr::from_ptr(c_headers) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -1577,8 +2137,12 @@ pub extern "C" fn http3_stop(c_id: c_int) {
 #[unsafe(no_mangle)]
 pub extern "C" fn wt_close(c_stream_id: c_int) {
   if let Some(map) = WT_STREAMS.get() {
-    let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebTransportStream>>> = {
+      let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let mut stream_lock: std::sync::MutexGuard<'_, WebTransportStream> = stream.lock().unwrap();
         stream_lock.close();
@@ -1722,8 +2286,12 @@ pub extern "C" fn wt_push(
   c_bytes_len: c_int,
 ) {
   if let Some(map) = WT_STREAMS.get() {
-    let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebTransportStream>>> = {
+      let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
@@ -1758,8 +2326,12 @@ pub extern "C" fn wt_push(
 #[unsafe(no_mangle)]
 pub extern "C" fn wt_push_bytes(c_stream_id: c_int, c_bytes: *const c_char, c_bytes_len: c_int) {
   if let Some(map) = WT_STREAMS.get() {
-    let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebTransportStream>>> = {
+      let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let bytes: &[u8] = if c_bytes.is_null() || c_bytes_len <= 0 {
           &[]
@@ -1780,8 +2352,12 @@ pub extern "C" fn wt_push_bytes(c_stream_id: c_int, c_bytes: *const c_char, c_by
 #[unsafe(no_mangle)]
 pub extern "C" fn wt_push_json(c_stream_id: c_int, c_json: *const c_char) {
   if let Some(map) = WT_STREAMS.get() {
-    let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
-    match streams.get(&c_stream_id) {
+    let stream: Option<Arc<Mutex<WebTransportStream>>> = {
+      let streams: MutexGuard<'_, WebTransportStreams> = map.lock().unwrap();
+      streams.get(&c_stream_id).cloned()
+    };
+
+    match stream {
       Some(stream) => {
         let json: JSON = match unsafe { CStr::from_ptr(c_json) }.to_str() {
           Ok(s) => match serde_json::from_str(s) {
