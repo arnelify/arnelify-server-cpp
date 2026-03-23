@@ -22,7 +22,7 @@
 
 //! <img src="https://static.wikia.nocookie.net/arnelify/images/c/c8/Arnelify-logo-2024.png/revision/latest?cb=20240701012515" style="width:336px;" alt="Arnelify Logo" />
 //!
-//! ![Arnelify Server for Rust](https://img.shields.io/badge/Arnelify%20Server%20for%20Rust-0.9.6-yellow)
+//! ![Arnelify Server for Rust](https://img.shields.io/badge/Arnelify%20Server%20for%20Rust-0.9.8-yellow)
 //! ![Rust](https://img.shields.io/badge/Rust-1.91.1-orange)
 //! ![Cargo](https://img.shields.io/badge/Cargo-1.91.1-blue)
 //!
@@ -131,6 +131,7 @@
 //! | **CERT_PEM**| Path to the TLS cert-file in PEM format. |
 //! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
 //! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_ALIVE**| defines how long the HTTP server keeps a connection. |
 //! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
 //! | **KEY_PEM**| Path to the TLS private key-file in PEM format. |
 //! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
@@ -273,6 +274,7 @@
 //! | **CERT_PEM**| Path to the TLS cert-file in PEM format. |
 //! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
 //! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_ALIVE**| defines how long the HTTP server keeps a connection. |
 //! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
 //! | **KEY_PEM**| Path to the TLS private key-file in PEM format. |
 //! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
@@ -349,6 +351,7 @@
 //! | **BLOCK_SIZE_KB**| The size of the allocated memory used for processing large packets. |
 //! | **CHARSET**| Defines the encoding that the server will recommend to all client applications. |
 //! | **COMPRESSION**| If this option is enabled, the server will use BROTLI compression if the client application supports it. This setting increases CPU resource consumption. The server will not use compression if the data size exceeds the value of **BLOCK_SIZE_KB**. |
+//! | **KEEP_ALIVE**| defines how long the HTTP server keeps a connection. |
 //! | **KEEP_EXTENSIONS**| If this option is enabled, file extensions will be preserved. |
 //! | **MAX_FIELDS**| Defines the maximum number of fields in the received form. |
 //! | **MAX_FIELDS_SIZE_TOTAL_MB**| Defines the maximum total size of all fields in the form. This option does not include file sizes. |
@@ -447,14 +450,16 @@
 //! ```
 //! # Release Notes
 //!
-//! Version 0.9.6 — a multi-language server with HTTP 3.0 and WebTransport support.
+//! Version 0.9.8 — a multi-language server with HTTP 3.0 and WebTransport support.
 //!
 //! We are excited to introduce the Arnelify Server for Rust! Please note that this version is raw and still in active development.
 //!
 //! Change Log:
 //!
-//! * Async Multi-Threading.
-//! * Block processing in "on-the-fly" mode.
+//! * HTTP 3.0 + WebTransport.
+//! * Security-aware logging with attack detection.
+//! * Async Runtime & Multi-Threading.
+//! * Large file upload and download support.
 //! * BROTLI compression (still in development).
 //! * FFI, PYO3 and NEON support.
 //! * Significant refactoring and optimizations.
