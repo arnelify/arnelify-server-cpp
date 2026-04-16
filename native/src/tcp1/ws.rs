@@ -27,7 +27,7 @@ use std::{
   io::{Error, ErrorKind},
   process,
   sync::{
-    Arc, Mutex,
+    Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
     atomic::{AtomicU64, Ordering},
   },
   time::{SystemTime, UNIX_EPOCH},
@@ -54,10 +54,11 @@ pub type JSON = serde_json::Value;
 pub struct WebSocketOpts {
   pub block_size_kb: usize,
   pub compression: bool,
-  pub handshake_timeout: u64,
   pub max_message_size_kb: u64,
   pub ping_timeout: u64,
   pub port: u16,
+  pub rate_limit: u64,
+  pub read_timeout: u64,
   pub send_timeout: u64,
   pub thread_limit: u64,
 }
@@ -75,6 +76,7 @@ struct WebSocketReq {
   topic: String,
   buff: Vec<u8>,
   binary: Vec<u8>,
+  ip: Option<String>,
 
   compression: Option<String>,
   binary_length: usize,
@@ -97,6 +99,7 @@ impl WebSocketReq {
       topic: String::new(),
       buff: Vec::new(),
       binary: Vec::new(),
+      ip: None,
 
       compression: None,
       binary_length: 0,
@@ -104,12 +107,13 @@ impl WebSocketReq {
 
       ctx: serde_json::json!({
         "_state": {
+          "addr": JSON::Null,
           "cookie": {},
           "headers": {},
           "method": "GET",
           "path": "/",
           "protocol": "WebSocket",
-          "topic": JSON::Null
+          "topic": "_"
         },
         "params": {
           "files": {},
@@ -171,6 +175,14 @@ impl WebSocketReq {
 
   pub fn get_ctx(&self) -> WebSocketCtx {
     self.ctx.clone()
+  }
+
+  pub fn get_ip(&self) -> String {
+    if let Some(ip) = &self.ip {
+      return ip.clone();
+    }
+
+    String::from("_")
   }
 
   pub fn get_topic(&self) -> String {
@@ -252,6 +264,10 @@ impl WebSocketReq {
     Ok(1)
   }
 
+  pub fn set_addr(&mut self, addr: &str) -> () {
+    self.ctx["_state"]["addr"] = JSON::String(String::from(addr));
+  }
+
   fn read_body(&mut self) -> Result<Option<u8>, Error> {
     if !self.has_meta {
       let meta_end: usize = match self.buff.iter().position(|&b| b == b':') {
@@ -282,7 +298,7 @@ impl WebSocketReq {
     }
 
     if self.json_length != 0 && self.buff.len() >= self.json_length {
-      let message: &str = match std::str::from_utf8(&self.buff[..self.json_length]) {
+      let ctx: &str = match std::str::from_utf8(&self.buff[..self.json_length]) {
         Ok(v) => v,
         Err(_) => {
           self.buff.clear();
@@ -290,7 +306,7 @@ impl WebSocketReq {
         }
       };
 
-      let json: serde_json::Value = match serde_json::from_str(message) {
+      let json: serde_json::Value = match serde_json::from_str(ctx) {
         Ok(v) => v,
         Err(_) => {
           self.buff.clear();
@@ -304,6 +320,15 @@ impl WebSocketReq {
 
       self.topic = String::from(json["topic"].as_str().unwrap_or(""));
       self.ctx["_state"]["topic"] = json["topic"].clone();
+
+      if !json["payload"].is_object() {
+        self.buff.clear();
+        return Err(Error::new(
+          ErrorKind::InvalidInput,
+          "Invalid application/json.",
+        ));
+      }
+
       self.ctx["params"]["body"] = json["payload"].clone();
 
       self.buff.drain(..self.json_length);
@@ -414,7 +439,12 @@ impl WebSocketReq {
       }
     };
 
-    self.ctx["_state"]["path"] = JSON::String(path.to_string());
+    if path.contains("..") || path.contains("\0") {
+      self.ctx["_state"]["path"] = JSON::String(String::from("_"));
+    } else {
+      self.ctx["_state"]["path"] = JSON::String(String::from(path));
+    }
+
     self.has_path = true;
 
     self.buff.drain(..=path_end);
@@ -498,6 +528,22 @@ impl WebSocketReq {
               return Err(Error::new(ErrorKind::InvalidData, "Invalid UTF-8."));
             }
           };
+
+          if key == "X-Forwarded-For" {
+            self.ip = Some(value.to_string());
+          }
+
+          if self.ip.is_none() && key == "X-Real-IP" {
+            self.ip = Some(value.to_string());
+          }
+
+          if self.ip.is_none() && key == "CF-Connecting-IP" {
+            self.ip = Some(value.to_string());
+          }
+
+          if self.ip.is_none() && key == "CF-Connecting-IPv6" {
+            self.ip = Some(value.to_string());
+          }
 
           self.set_header(key.to_string(), value.to_string())?;
         }
@@ -590,9 +636,7 @@ impl WebSocketStream {
   pub fn new(opts: WebSocketOpts) -> Self {
     Self {
       opts,
-      cb_send: Arc::new(|chunk: Vec<u8>| {
-        println!("{:?}", chunk);
-      }),
+      cb_send: Arc::new(|_chunk: Vec<u8>| {}),
       compression: None,
       headers_sent: false,
       topic: String::new(),
@@ -707,74 +751,85 @@ pub type WebSocketHandler = dyn Fn(Arc<Mutex<WebSocketCtx>>, Arc<Mutex<WebSocket
   + Sync;
 pub type WebSocketLogger = dyn Fn(&str, &str) + Send + Sync;
 
-pub struct WebSocket {
-  cb_logger: Arc<Mutex<Arc<WebSocketLogger>>>,
-  handlers: Arc<Mutex<HashMap<String, Arc<WebSocketHandler>>>>,
-  opts: WebSocketOpts,
-  shutdown: Arc<Notify>,
-}
-
-impl WebSocket {
-  pub fn new(opts: WebSocketOpts) -> Self {
-    Self {
-      opts,
-      cb_logger: Arc::new(Mutex::new(Arc::new(move |_level: &str, message: &str| {
-        println!("[Arnelify Server]: {}", message);
-      }))),
-      handlers: Arc::new(Mutex::new(HashMap::new())),
-      shutdown: Arc::new(Notify::new()),
+async fn disconnect(
+  handler: &Option<Arc<WebSocketHandler>>,
+  args: &Arc<Mutex<Option<(Arc<Mutex<WebSocketCtx>>, Arc<Mutex<WebSocketBytes>>)>>>,
+  opts: &WebSocketOpts,
+) {
+  if let Some(handler) = handler {
+    let guard = args.lock().unwrap();
+    if let Some((ctx, bytes)) = &*guard {
+      handler(
+        Arc::clone(ctx),
+        Arc::clone(bytes),
+        Arc::new(Mutex::new(WebSocketStream::new(opts.clone()))),
+      );
     }
   }
+}
 
-  async fn acceptor(
-    &self,
-    listener: &TcpListener,
-    logger_rt: Arc<Mutex<Arc<WebSocketLogger>>>,
-    handlers_rt: Arc<Mutex<HashMap<String, Arc<WebSocketHandler>>>>,
-    opts_rt: Arc<WebSocketOpts>,
-  ) -> () {
-    let logger_accept: Arc<Mutex<Arc<WebSocketLogger>>> = Arc::clone(&logger_rt);
-    let handlers_accept: Arc<Mutex<HashMap<String, Arc<WebSocketHandler>>>> =
-      Arc::clone(&handlers_rt);
-    let opts_accept: Arc<WebSocketOpts> = Arc::clone(&opts_rt);
+async fn acceptor(
+  listener: &TcpListener,
+  logger_rt: Arc<RwLock<Arc<WebSocketLogger>>>,
+  handlers_rt: Arc<RwLock<HashMap<String, Arc<WebSocketHandler>>>>,
+  opts_rt: Arc<WebSocketOpts>,
+  rate_limit_map_rt: Arc<Mutex<HashMap<String, u64>>>,
+) -> () {
+  let logger_conn: Arc<RwLock<Arc<WebSocketLogger>>> = Arc::clone(&logger_rt);
+  let handlers_conn: Arc<RwLock<HashMap<String, Arc<WebSocketHandler>>>> = Arc::clone(&handlers_rt);
+  let opts_conn: Arc<WebSocketOpts> = Arc::clone(&opts_rt);
+  let read_timeout: Duration = Duration::from_secs(opts_conn.read_timeout);
+  let send_timeout: Duration = Duration::from_secs(opts_conn.send_timeout);
 
-    let (socket, addr) = listener.accept().await.unwrap();
+  let frame_size: usize = opts_conn.block_size_kb * 1024 / 4;
+  let max_message_size: usize = (opts_conn.max_message_size_kb * 1024) as usize;
 
-    // HANDSHAKE TASK
-    tokio::spawn(async move {
-      let (tx, mut rx) = mpsc::channel::<Message>(64);
-      let mut req: WebSocketReq = WebSocketReq::new((*opts_accept).clone());
-      let stream: Arc<Mutex<WebSocketStream>> =
-        Arc::new(Mutex::new(WebSocketStream::new((*opts_accept).clone())));
-      {
-        let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> = stream.lock().unwrap();
-        stream_lock.on_send(Arc::new({
-          let tx: mpsc::Sender<Message> = tx.clone();
-          move |chunk: Vec<u8>| {
-            if chunk == b"x" {
-              let _ = tx.try_send(Message::Close(None));
-              return;
+  match listener.accept().await {
+    Ok((socket, addr)) => {
+      // CONNECTION TASK
+      tokio::spawn(async move {
+        let block_size: usize = (*opts_conn).block_size_kb * 1024;
+        let (tx, mut rx) = mpsc::channel::<Message>(64);
+        let mut req: WebSocketReq = WebSocketReq::new((*opts_conn).clone());
+        req.set_addr(&addr.to_string());
+        let stream: Arc<Mutex<WebSocketStream>> =
+          Arc::new(Mutex::new(WebSocketStream::new((*opts_conn).clone())));
+        {
+          let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> = stream.lock().unwrap();
+          stream_lock.on_send(Arc::new({
+            let tx: mpsc::Sender<Message> = tx.clone();
+            move |chunk: Vec<u8>| {
+              if chunk == b"x" {
+                let _ = tx.try_send(Message::Close(None));
+                return;
+              }
+
+              let _ = tx.try_send(Message::Binary(Bytes::from(chunk)));
             }
+          }));
+        }
 
-            let _ = tx.try_send(Message::Binary(Bytes::from(chunk)));
-          }
-        }));
-      }
+        let mut ip: String = String::from("_");
+        let last_args: Arc<Mutex<Option<(Arc<Mutex<WebSocketCtx>>, Arc<Mutex<WebSocketBytes>>)>>> =
+          Arc::new(Mutex::new(None));
+        let logger_final: Arc<RwLock<Arc<WebSocketLogger>>> = Arc::clone(&logger_conn);
 
-      let frame_size: usize = opts_accept.block_size_kb * 1024 / 4;
-      let block_size: usize = opts_accept.block_size_kb * 1024;
-      let max_message_size: usize = (opts_accept.max_message_size_kb * 1024) as usize;
+        let (on_connect, on_disconnect) = {
+          let handlers_lock = handlers_conn.read().unwrap();
+          (
+            handlers_lock.get("_connect").cloned(),
+            handlers_lock.get("_disconnect").cloned(),
+          )
+        };
 
-      let config: protocol::WebSocketConfig = protocol::WebSocketConfig::default();
-      config.accept_unmasked_frames(false);
-      config.max_message_size(Some(max_message_size));
-      config.max_frame_size(Some(frame_size));
-      config.read_buffer_size(block_size);
-      config.write_buffer_size(block_size);
+        let config: protocol::WebSocketConfig = protocol::WebSocketConfig::default();
+        config.accept_unmasked_frames(false);
+        config.max_message_size(Some(max_message_size));
+        config.max_frame_size(Some(frame_size));
+        config.read_buffer_size(block_size);
+        config.write_buffer_size(block_size);
 
-      let socket: Stream<TcpStream> = match timeout(
-        Duration::from_secs(opts_accept.handshake_timeout),
-        tokio_tungstenite::accept_hdr_async_with_config(
+        let req_headers = tokio_tungstenite::accept_hdr_async_with_config(
           socket,
           |http_req: &handshake::server::Request, mut http_res: handshake::server::Response| {
             const SERVER: http::HeaderValue = http::HeaderValue::from_static("Arnelify Server");
@@ -802,180 +857,328 @@ impl WebSocket {
             req.add(&buff);
             let _ = req.read_block();
 
+            ip = req.get_ip();
+
+            {
+              let mut map: std::sync::MutexGuard<'_, HashMap<String, u64>> =
+                rate_limit_map_rt.lock().unwrap();
+              let entry: &mut u64 = map.entry(ip.clone()).or_insert(0);
+              if *entry >= (*opts_conn).rate_limit {
+                return Err(handshake::server::ErrorResponse::new(Some(
+                  "429 Too Many Requests".into(),
+                )));
+              }
+
+              *entry += 1;
+            }
+
             Ok(http_res)
           },
           Some(config),
-        ),
-      )
-      .await
-      {
-        Ok(Ok(handshake)) => handshake,
-        _ => {
-          let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-            logger_accept.lock().unwrap();
-          (logger_lock)("warning", "Handshake failed.");
-          return;
+        );
+
+        // HANDSHAKE
+        let socket: Stream<TcpStream> = match timeout(read_timeout, req_headers).await {
+          Ok(Ok(v)) => v,
+          Ok(Err(_e)) => {
+            let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+              logger_conn.read().unwrap();
+            (logger_lock)("warning", &format!("Client {}: Handshake error", addr));
+            return;
+          }
+          _ => {
+            let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+              logger_conn.read().unwrap();
+            (logger_lock)("warning", &format!("Client {}: Handshake timeout", addr));
+            return;
+          }
+        };
+
+        if let Some(handler) = &on_connect {
+          let ctx_conn: Arc<Mutex<WebSocketCtx>> = Arc::new(Mutex::new(req.get_ctx()));
+          let bytes_conn: Arc<Mutex<WebSocketBytes>> = Arc::new(Mutex::new(Vec::new()));
+          let stream_conn: Arc<Mutex<WebSocketStream>> = Arc::clone(&stream);
+          handler(ctx_conn, bytes_conn, stream_conn);
+
+          let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_conn.read().unwrap();
+          (logger_lock)("info", &format!("Client {}: Connected", addr));
         }
-      };
 
-      {
-        let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-          logger_accept.lock().unwrap();
-        (logger_lock)("success", &format!("New connection from {:?}", addr));
-      }
+        let (mut write, mut read) = socket.split();
+        let last: Arc<AtomicU64> = Arc::new(AtomicU64::new(
+          SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+        ));
 
-      let (mut write, mut read) = socket.split();
+        let read_task: JoinHandle<()> = {
+          let last_args_read = Arc::clone(&last_args);
+          let last_read: Arc<AtomicU64> = Arc::clone(&last);
+          let logger_read: Arc<RwLock<Arc<WebSocketLogger>>> = Arc::clone(&logger_conn);
+          let tx_read: mpsc::Sender<Message> = tx.clone();
 
-      let send_timeout: Duration = Duration::from_secs(opts_accept.send_timeout);
-      let last: Arc<AtomicU64> = Arc::new(AtomicU64::new(
-        SystemTime::now()
-          .duration_since(UNIX_EPOCH)
-          .unwrap()
-          .as_secs(),
-      ));
+          // READ TASK
+          tokio::spawn(async move {
+            loop {
+              match read.next().await {
+                Some(msg) => match msg {
+                  Ok(Message::Binary(bytes)) => {
+                    req.add(&bytes);
 
-      let read_task: JoinHandle<()> = {
-        let last_read: Arc<AtomicU64> = Arc::clone(&last);
-        let logger_read: Arc<Mutex<Arc<WebSocketLogger>>> = Arc::clone(&logger_accept);
-        let tx_read: mpsc::Sender<Message> = tx.clone();
+                    match req.read_block() {
+                      Ok(Some(_)) => {
+                        let topic: String = req.get_topic();
+                        let ctx_handler: Arc<Mutex<WebSocketCtx>> =
+                          Arc::new(Mutex::new(req.get_ctx()));
+                        let bytes_handler: Arc<Mutex<WebSocketBytes>> =
+                          Arc::new(Mutex::new(req.get_bytes()));
+                        let stream_handler: Arc<Mutex<WebSocketStream>> = Arc::clone(&stream);
+                        {
+                          let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> =
+                            stream_handler.lock().unwrap();
+                          stream_lock.set_topic(&topic);
+                          stream_lock.set_compression(req.get_compression());
+                        }
 
-        // READ TASK
-        tokio::spawn(async move {
-          while let Some(msg) = read.next().await {
-            match msg {
-              Ok(Message::Binary(bytes)) => {
-                req.add(&bytes);
+                        {
+                          let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+                            logger_read.read().unwrap();
+                          logger_lock(
+                            "info",
+                            &format!("Client {}: Sent payload: {}", addr, req.get_ctx()),
+                          );
+                        }
 
-                match req.read_block() {
-                  Ok(Some(_)) => {
-                    let topic: String = req.get_topic();
-                    let ctx_handler: Arc<Mutex<WebSocketCtx>> = Arc::new(Mutex::new(req.get_ctx()));
-                    let bytes_handler: Arc<Mutex<WebSocketBytes>> =
-                      Arc::new(Mutex::new(req.get_bytes()));
-                    let stream_handler: Arc<Mutex<WebSocketStream>> = Arc::clone(&stream);
-                    {
-                      let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> =
-                        stream_handler.lock().unwrap();
-                      stream_lock.set_topic(&topic);
-                      stream_lock.set_compression(req.get_compression());
-                      req.reset();
-                    }
+                        req.reset();
 
-                    req.reset();
-                    let handler_opt: Option<Arc<WebSocketHandler>> = {
-                      let handlers_lock: std::sync::MutexGuard<
-                        '_,
-                        HashMap<String, Arc<WebSocketHandler>>,
-                      > = handlers_accept.lock().unwrap();
-                      handlers_lock.get(&topic).cloned()
-                    };
+                        // SAVE LAST ARGS FOR DISCONNECT
+                        let ctx_last: Arc<Mutex<WebSocketCtx>> = Arc::clone(&ctx_handler);
+                        let bytes_last: Arc<Mutex<WebSocketBytes>> = Arc::clone(&bytes_handler);
+                        {
+                          *last_args_read.lock().unwrap() = Some((ctx_last, bytes_last));
+                        }
 
-                    if let Some(handler) = handler_opt {
-                      handler(ctx_handler, bytes_handler, stream_handler);
+                        let handler_opt: Option<Arc<WebSocketHandler>> = {
+                          let handlers_lock: RwLockReadGuard<
+                            '_,
+                            HashMap<String, Arc<WebSocketHandler>>,
+                          > = handlers_conn.read().unwrap();
+                          handlers_lock
+                            .get(&topic)
+                            .or_else(|| handlers_lock.get("_"))
+                            .cloned()
+                        };
+
+                        if let Some(handler) = handler_opt {
+                          handler(ctx_handler, bytes_handler, stream_handler);
+                        }
+                      }
+                      Ok(None) => {
+                        let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+                          logger_read.read().unwrap();
+                        logger_lock("warning", &format!("Client {}: Block read error.", addr));
+                        req.reset();
+                      }
+                      Err(e) => {
+                        let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+                          logger_read.read().unwrap();
+                        logger_lock(
+                          "warning",
+                          &format!("Client {}: Block read error: {}", addr, e),
+                        );
+                        break;
+                      }
                     }
                   }
-                  Ok(None) => {
-                    let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-                      logger_read.lock().unwrap();
-                    logger_lock("warning", &format!("Block read error."));
-                    req.reset();
+
+                  Ok(Message::Ping(payload)) => {
+                    let _ = tx_read.send(Message::Pong(payload)).await;
                   }
-                  Err(e) => {
-                    let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-                      logger_read.lock().unwrap();
-                    logger_lock("warning", &format!("Block read error: {}", e));
+
+                  Ok(Message::Pong(_)) => {
+                    last_read.store(
+                      SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                      Ordering::SeqCst,
+                    );
+                  }
+
+                  Ok(Message::Close(frame)) => {
+                    let _ = tx_read.send(Message::Close(frame)).await;
                     break;
                   }
+                  Err(_) => break,
+                  _ => {}
+                },
+                None => break,
+              }
+            }
+          })
+        };
+
+        // WRITE TASK
+        let write_task: JoinHandle<()> = {
+          let logger_write: Arc<RwLock<Arc<WebSocketLogger>>> = Arc::clone(&logger_conn);
+          tokio::spawn(async move {
+            while let Some(msg) = rx.recv().await {
+              match timeout(send_timeout, write.send(msg)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => {}
+                Err(_) => {
+                  let logger: RwLockReadGuard<'_, Arc<WebSocketLogger>> =
+                    logger_write.read().unwrap();
+                  logger("warning", &format!("Client {}: Write timeout", addr));
+                  break;
                 }
               }
-
-              Ok(Message::Ping(payload)) => {
-                let _ = tx_read.send(Message::Pong(payload)).await;
-              }
-
-              Ok(Message::Pong(_)) => {
-                last_read.store(
-                  SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                  Ordering::SeqCst,
-                );
-              }
-
-              Ok(Message::Close(frame)) => {
-                let _ = tx_read.send(Message::Close(frame)).await;
-              }
-              Err(_) => break,
-              _ => {}
             }
-          }
-        })
-      };
 
-      // WRITE TASK
-      let write_task: JoinHandle<()> = tokio::spawn(async move {
-        while let Some(msg) = rx.recv().await {
-          if timeout(send_timeout, write.send(msg)).await.is_err() {
-            break;
+            let logger: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_write.read().unwrap();
+            logger("info", &format!("Client {}: Write task finished", addr));
+          })
+        };
+
+        // PING TASK
+        let ping_task: JoinHandle<()> = {
+          let last_pong: Arc<AtomicU64> = Arc::clone(&last);
+          let opts_ping: Arc<WebSocketOpts> = Arc::clone(&opts_conn);
+          let timeout_ping: Duration = Duration::from_secs((*opts_conn).ping_timeout);
+          let tx_ping: mpsc::Sender<Message> = tx.clone();
+          tokio::spawn(async move {
+            loop {
+              tokio::time::sleep(timeout_ping).await;
+
+              let now: u64 = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs();
+
+              if now - last_pong.load(Ordering::SeqCst) > opts_ping.ping_timeout {
+                break;
+              }
+
+              let _ = tx_ping.send(Message::Ping(Bytes::new())).await;
+            }
+          })
+        };
+
+        tokio::select! {
+          _ = read_task => {},
+          _ = write_task => {}
+        }
+
+        ping_task.abort();
+        {
+          let mut map: std::sync::MutexGuard<'_, HashMap<String, u64>> =
+            rate_limit_map_rt.lock().unwrap();
+          if let Some(entry) = map.get_mut(&ip) {
+            if *entry > 0 {
+              *entry -= 1;
+            }
+
+            if *entry == 0 {
+              map.remove(&ip);
+            }
           }
         }
+
+        disconnect(&on_disconnect, &last_args, &opts_conn).await;
+        let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_final.read().unwrap();
+        logger_lock("info", &format!("Client {}: Disconnected", addr));
       });
+    }
+    Err(e) => {
+      let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_conn.read().unwrap();
+      logger_lock("warning", &format!("Acceptor error: {}", e));
+      return;
+    }
+  }
+}
 
-      // PING TASK
-      let ping_task: JoinHandle<()> = {
-        let last_pong: Arc<AtomicU64> = Arc::clone(&last);
-        let opts_ping: Arc<WebSocketOpts> = Arc::clone(&opts_accept);
-        let timeout_ping: Duration = Duration::from_secs(1);
-        let tx_ping: mpsc::Sender<Message> = tx.clone();
-        tokio::spawn(async move {
-          loop {
-            tokio::time::sleep(timeout_ping).await;
+pub struct WebSocket {
+  cb_logger: Arc<RwLock<Arc<WebSocketLogger>>>,
+  handlers: Arc<RwLock<HashMap<String, Arc<WebSocketHandler>>>>,
+  opts: WebSocketOpts,
+  rate_limit_map: Arc<Mutex<HashMap<String, u64>>>,
+  shutdown: Arc<Notify>,
+}
 
-            let now: u64 = SystemTime::now()
-              .duration_since(UNIX_EPOCH)
-              .unwrap()
-              .as_secs();
+impl WebSocket {
+  pub fn new(opts: WebSocketOpts) -> Self {
+    let handlers: Arc<RwLock<HashMap<String, Arc<WebSocketHandler>>>> =
+      Arc::new(RwLock::new(HashMap::new()));
+    {
+      let mut handlers_write: RwLockWriteGuard<'_, HashMap<String, Arc<WebSocketHandler>>> =
+        handlers.write().unwrap();
+      handlers_write.insert(
+        String::from("_"),
+        Arc::new(
+          move |_ctx: Arc<Mutex<WebSocketCtx>>,
+                _bytes: Arc<Mutex<WebSocketBytes>>,
+                stream: Arc<Mutex<WebSocketStream>>| {
+            let mut stream_lock: std::sync::MutexGuard<'_, WebSocketStream> =
+              stream.lock().unwrap();
+            stream_lock.push_json(&serde_json::json!({
+              "code": 404,
+              "error": "Not found."
+            }));
+            stream_lock.close();
+          },
+        ),
+      );
 
-            if now - last_pong.load(Ordering::SeqCst) > opts_ping.ping_timeout {
-              break;
-            }
+      handlers_write.insert(
+        String::from("_connect"),
+        Arc::new(
+          move |_ctx: Arc<Mutex<WebSocketCtx>>,
+                _bytes: Arc<Mutex<WebSocketBytes>>,
+                _stream: Arc<Mutex<WebSocketStream>>| {},
+        ),
+      );
 
-            let _ = tx_ping.send(Message::Ping(Bytes::new())).await;
-          }
-        })
-      };
+      handlers_write.insert(
+        String::from("_disconnect"),
+        Arc::new(
+          move |_ctx: Arc<Mutex<WebSocketCtx>>,
+                _bytes: Arc<Mutex<WebSocketBytes>>,
+                _stream: Arc<Mutex<WebSocketStream>>| {},
+        ),
+      );
+    }
 
-      tokio::select! {
-        _ = read_task => {},
-        _ = write_task => {}
-      }
-
-      ping_task.abort();
-
-      let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-        logger_accept.lock().unwrap();
-      logger_lock("success", &format!("Client disconnected {}", addr));
-    });
+    Self {
+      opts,
+      cb_logger: Arc::new(RwLock::new(Arc::new(move |_level: &str, message: &str| {
+        println!("[Arnelify Server]: {}", message);
+      }))),
+      handlers,
+      rate_limit_map: Arc::new(Mutex::new(HashMap::new())),
+      shutdown: Arc::new(Notify::new()),
+    }
   }
 
   pub fn logger(&self, cb: Arc<WebSocketLogger>) {
-    let mut logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-      self.cb_logger.lock().unwrap();
-    *logger_lock = cb;
+    let mut logger_write: RwLockWriteGuard<'_, Arc<WebSocketLogger>> =
+      self.cb_logger.write().unwrap();
+    *logger_write = cb;
   }
 
   pub fn on(&self, topic: &str, cb: Arc<WebSocketHandler>) {
-    let mut map: std::sync::MutexGuard<'_, HashMap<String, Arc<WebSocketHandler>>> =
-      self.handlers.lock().unwrap();
-    map.insert(String::from(topic), cb);
+    let mut handlers_write: RwLockWriteGuard<'_, HashMap<String, Arc<WebSocketHandler>>> =
+      self.handlers.write().unwrap();
+    handlers_write.insert(String::from(topic), cb);
   }
 
   pub fn start(&self) {
-    let logger_rt: Arc<Mutex<Arc<WebSocketLogger>>> = Arc::clone(&self.cb_logger);
-    let handlers_rt: Arc<Mutex<HashMap<String, Arc<WebSocketHandler>>>> =
+    let logger_rt: Arc<RwLock<Arc<WebSocketLogger>>> = Arc::clone(&self.cb_logger);
+    let handlers_rt: Arc<RwLock<HashMap<String, Arc<WebSocketHandler>>>> =
       Arc::clone(&self.handlers);
     let opts_rt: Arc<WebSocketOpts> = Arc::new(self.opts.clone());
+    let rate_limit_map_rt: Arc<Arc<Mutex<HashMap<String, u64>>>> =
+      Arc::new(self.rate_limit_map.clone());
     let shutdown_rt: Arc<Notify> = Arc::clone(&self.shutdown);
 
     let rt: Runtime = Builder::new_multi_thread()
@@ -987,29 +1190,31 @@ impl WebSocket {
     rt.block_on(async move {
       let addr: (&str, u16) = ("0.0.0.0", opts_rt.port);
       let listener = TcpListener::bind(&addr).await.unwrap_or_else(|_| {
-        let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-          logger_rt.lock().unwrap();
-        logger_lock("error", &format!("Port {} already in use.", opts_rt.port));
+        let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_rt.read().unwrap();
+        logger_lock(
+          "error",
+          &format!("Port {} already in use.", (*opts_rt).port),
+        );
         process::exit(1);
       });
 
       {
-        let logger_lock: std::sync::MutexGuard<'_, Arc<WebSocketLogger>> =
-          logger_rt.lock().unwrap();
-        logger_lock("success", &format!("WebSocket on {}", opts_rt.port));
+        let logger_lock: RwLockReadGuard<'_, Arc<WebSocketLogger>> = logger_rt.read().unwrap();
+        logger_lock("success", &format!("WebSocket on port {}", (*opts_rt).port));
       }
 
       loop {
         tokio::select! {
-            _ = shutdown_rt.notified() => {
-                break;
-            }
-            _ = self.acceptor(
-                &listener,
-                Arc::clone(&logger_rt),
-                Arc::clone(&handlers_rt),
-                Arc::clone(&opts_rt)
-            ) => {}
+          _ = shutdown_rt.notified() => {
+            break;
+          }
+          _ = acceptor(
+            &listener,
+            Arc::clone(&logger_rt),
+            Arc::clone(&handlers_rt),
+            Arc::clone(&opts_rt),
+            Arc::clone(&rate_limit_map_rt)
+          ) => {}
         }
       }
     });

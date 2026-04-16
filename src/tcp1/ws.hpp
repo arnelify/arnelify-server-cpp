@@ -9,8 +9,8 @@
 // COPIES OF THE SOFTWARE, AND TO PERMIT PERSONS TO WHOM THE SOFTWARE IS
 // FURNISHED TO DO SO, SUBJECT TO THE FOLLOWING CONDITIONS:
 //
-// THE ABOVE COPYRIGHT NOTICE AND THIS PERMISSION NOTICE SHALL BE INCLUDED IN ALL
-// COPIES OR SUBSTANTIAL PORTIONS OF THE SOFTWARE.
+// THE ABOVE COPYRIGHT NOTICE AND THIS PERMISSION NOTICE SHALL BE INCLUDED IN
+// ALL COPIES OR SUBSTANTIAL PORTIONS OF THE SOFTWARE.
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -40,25 +40,28 @@ using WebSocketRes = Json::Value;
 struct WebSocketOpts {
   const std::size_t block_size_kb;
   const bool compression;
-  const std::uint64_t handshake_timeout;
   const std::uint64_t max_message_size_kb;
   const std::uint64_t ping_timeout;
   const std::uint16_t port;
+  const std::uint64_t rate_limit;
+  const std::uint64_t read_timeout;
   const std::uint64_t send_timeout;
   const std::uint64_t thread_limit;
 
   WebSocketOpts(const std::size_t block_size_kb, const bool compression,
-                const std::uint64_t handshake_timeout,
                 const std::uint64_t max_message_size_kb,
                 const std::uint64_t ping_timeout, const std::uint16_t port,
+                const std::uint64_t rate_limit,
+                const std::uint64_t read_timeout,
                 const std::uint64_t send_timeout,
                 const std::uint64_t thread_limit)
       : block_size_kb(block_size_kb),
         compression(compression),
-        handshake_timeout(handshake_timeout),
         max_message_size_kb(max_message_size_kb),
         ping_timeout(ping_timeout),
         port(port),
+        rate_limit(rate_limit),
+        read_timeout(read_timeout),
         send_timeout(send_timeout),
         thread_limit(thread_limit) {}
 };
@@ -188,12 +191,12 @@ class WebSocket {
 
     opts["block_size_kb"] = static_cast<Json::UInt64>(this->opts.block_size_kb);
     opts["compression"] = this->opts.compression;
-    opts["handshake_timeout"] =
-        static_cast<Json::UInt64>(this->opts.handshake_timeout);
     opts["max_message_size_kb"] =
         static_cast<Json::UInt64>(this->opts.max_message_size_kb);
     opts["ping_timeout"] = static_cast<Json::UInt64>(this->opts.ping_timeout);
     opts["port"] = static_cast<Json::UInt>(this->opts.port);
+    opts["rate_limit"] = static_cast<Json::UInt64>(this->opts.rate_limit);
+    opts["read_timeout"] = static_cast<Json::UInt64>(this->opts.read_timeout);
     opts["send_timeout"] = static_cast<Json::UInt64>(this->opts.send_timeout);
     opts["thread_limit"] = static_cast<Json::UInt64>(this->opts.thread_limit);
 

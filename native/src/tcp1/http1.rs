@@ -150,7 +150,7 @@ impl Http1Req {
           "method": "GET",
           "path": "/",
           "protocol": "HTTP/1.1",
-          "topic": JSON::Null,
+          "topic": "_"
         },
         "params": {
           "files": {},
@@ -263,9 +263,12 @@ impl Http1Req {
       current = &mut current[&key];
     }
 
-    let arr: &mut Vec<JSON> = current
-      .as_array_mut()
-      .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Invalid field name."))?;
+    let arr: &mut Vec<JSON> = match current.as_array_mut() {
+      Some(v) => v,
+      None => {
+        return Err(Error::new(ErrorKind::InvalidInput, "Invalid field name."));
+      }
+    };
 
     arr.push(JSON::String(self.body.clone()));
 
@@ -356,9 +359,13 @@ impl Http1Req {
       current = &mut current[&key];
     }
 
-    let arr: &mut Vec<JSON> = current
-      .as_array_mut()
-      .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Invalid field name."))?;
+    let arr: &mut Vec<JSON> = match current.as_array_mut() {
+      Some(v) => v,
+      None => {
+        return Err(Error::new(ErrorKind::InvalidInput, "Invalid field name."));
+      }
+    };
+
     arr.push(file);
 
     Ok(1)
@@ -366,6 +373,15 @@ impl Http1Req {
 
   fn set_header(&mut self, key: String, value: String) -> Result<u8, Error> {
     self.ctx["_state"]["headers"][&key] = JSON::String(value.to_string());
+
+    if key.eq_ignore_ascii_case("Transfer-Encoding") {
+      if value.to_ascii_lowercase().contains("chunked") {
+        return Err(Error::new(
+          ErrorKind::InvalidData,
+          "Chunked encoding is not supported.",
+        ));
+      }
+    }
 
     if key.eq_ignore_ascii_case("Cookie") {
       return self.set_cookie(&value);
@@ -376,11 +392,16 @@ impl Http1Req {
     }
 
     if key.eq_ignore_ascii_case("Content-Length") {
-      let len: usize = value
-        .parse()
-        .map_err(|_| Error::new(ErrorKind::InvalidData, "Content-Length must be a number."))?;
+      self.content_length = match value.parse::<usize>() {
+        Ok(v) => v,
+        Err(_) => {
+          return Err(Error::new(
+            ErrorKind::InvalidData,
+            "Content-Length must be a number.",
+          ));
+        }
+      };
 
-      self.content_length = len;
       return Ok(1);
     }
 
@@ -425,9 +446,13 @@ impl Http1Req {
       current = &mut current[&key];
     }
 
-    let arr: &mut Vec<JSON> = current
-      .as_array_mut()
-      .ok_or_else(|| Error::new(ErrorKind::InvalidInput, "Invalid query."))?;
+    let arr: &mut Vec<JSON> = match current.as_array_mut() {
+      Some(v) => v,
+      None => {
+        return Err(Error::new(ErrorKind::InvalidInput, "Invalid query."));
+      }
+    };
+
     arr.push(JSON::String(String::from(value)));
 
     Ok(1)
@@ -440,27 +465,25 @@ impl Http1Req {
       let header: &[u8] = &meta[start..me];
 
       if header.starts_with(b"Content-Disposition") {
-        let name_start: usize =
-          header
-            .windows(6)
-            .position(|w| w == b"name=\"")
-            .ok_or_else(|| {
-              Error::new(
-                ErrorKind::InvalidInput,
-                "Invalid Content-Disposition detected in multipart/form-data.",
-              )
-            })?;
-
-        let name_end: usize = header[name_start + 6..]
-          .iter()
-          .position(|&b| b == b'"')
-          .map(|v| v + name_start + 6)
-          .ok_or_else(|| {
-            Error::new(
+        let name_start: usize = match header.windows(6).position(|w| w == b"name=\"") {
+          Some(pos) => pos,
+          None => {
+            return Err(Error::new(
               ErrorKind::InvalidInput,
               "Invalid Content-Disposition detected in multipart/form-data.",
-            )
-          })?;
+            ));
+          }
+        };
+
+        let name_end: usize = match header[name_start + 6..].iter().position(|&b| b == b'"') {
+          Some(pos) => pos + name_start + 6,
+          None => {
+            return Err(Error::new(
+              ErrorKind::InvalidInput,
+              "Invalid Content-Disposition detected in multipart/form-data.",
+            ));
+          }
+        };
 
         let name_size: usize = name_end - name_start + 6;
         if name_size > 2048 {
@@ -483,16 +506,15 @@ impl Http1Req {
         self.body.clear();
 
         if let Some(fs) = header.windows(10).position(|w| w == b"filename=\"") {
-          let filename_end: usize = header[fs + 10..]
-            .iter()
-            .position(|&b| b == b'"')
-            .map(|v| v + fs + 10)
-            .ok_or_else(|| {
-              Error::new(
+          let filename_end: usize = match header[fs + 10..].iter().position(|&b| b == b'"') {
+            Some(pos) => pos + fs + 10,
+            None => {
+              return Err(Error::new(
                 ErrorKind::InvalidInput,
                 "Invalid filename detected in multipart/form-data.",
-              )
-            })?;
+              ));
+            }
+          };
 
           if filename_end - fs + 10 > 255 {
             return Err(Error::new(
@@ -501,8 +523,12 @@ impl Http1Req {
             ));
           }
 
-          let filename: &str = str::from_utf8(&header[fs + 10..filename_end])
-            .map_err(|_| Error::new(ErrorKind::InvalidInput, "Invalid UTF-8."))?;
+          let filename: &str = match str::from_utf8(&header[fs + 10..filename_end]) {
+            Ok(s) => s,
+            Err(_) => {
+              return Err(Error::new(ErrorKind::InvalidInput, "Invalid UTF-8."));
+            }
+          };
 
           self.files += 1;
           if self.files > self.opts.max_files {
@@ -528,12 +554,15 @@ impl Http1Req {
       }
 
       if header.starts_with(b"Content-Type") {
-        let mime_start: usize = header.windows(2).position(|w| w == b": ").ok_or_else(|| {
-          Error::new(
-            ErrorKind::InvalidInput,
-            "Invalid Content-Type detected in multipart/form-data.",
-          )
-        })?;
+        let mime_start: usize = match header.windows(2).position(|w| w == b": ") {
+          Some(pos) => pos,
+          None => {
+            return Err(Error::new(
+              ErrorKind::InvalidInput,
+              "Invalid Content-Type detected in multipart/form-data.",
+            ));
+          }
+        };
 
         let mime: &str = str::from_utf8(&header[mime_start + 2..])
           .map_err(|_| Error::new(ErrorKind::InvalidInput, "Invalid UTF-8."))?;
@@ -827,8 +856,16 @@ impl Http1Req {
         }
       };
 
-      self.ctx["params"]["body"] = json;
+      if !json.is_object() {
+        self.buff.drain(..self.content_length);
+        self.skip = self.content_length - self.size;
+        return Err(Error::new(
+          ErrorKind::InvalidInput,
+          "Invalid application/json.",
+        ));
+      }
 
+      self.ctx["params"]["body"] = json;
       self.has_body = true;
       self.buff.drain(..self.content_length);
       return Ok(Some(1));
@@ -1001,8 +1038,13 @@ impl Http1Req {
       }
     };
 
-    self.path = String::from(path);
-    self.ctx["_state"]["path"] = JSON::String(String::from(path));
+    if path.contains("..") || path.contains("\0") {
+      self.path = String::from("_");
+      self.ctx["_state"]["path"] = JSON::String(String::from("_"));
+    } else {
+      self.path = String::from(path);
+      self.ctx["_state"]["path"] = JSON::String(String::from(path));
+    }
 
     if let Some(qs_encoded) = query_encoded {
       let qs_bytes: Vec<u8> = qs_encoded.to_vec();
@@ -1264,7 +1306,7 @@ impl Http1Req {
         "method": "GET",
         "path": "/",
         "protocol": "HTTP/1.1",
-        "topic": JSON::Null
+        "topic": "_"
       },
       "params": {
         "files": {},
@@ -1658,7 +1700,7 @@ async fn acceptor(
       let (mut reader, mut writer) = socket.into_split();
       {
         let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> = logger.read().unwrap();
-        (logger_lock)("info", &format!("Client {:?}: Connected", addr));
+        (logger_lock)("info", &format!("Client {}: Connected", addr));
       }
 
       let logger_conn: Arc<RwLock<Arc<Http1Logger>>> = Arc::clone(&logger);
@@ -1688,7 +1730,7 @@ async fn acceptor(
             Ok(Ok(0)) => {
               disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
               let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> = logger_conn.read().unwrap();
-              logger_lock("info", &format!("Client {:?}: Disconnected", addr));
+              logger_lock("info", &format!("Client {}: Disconnected", addr));
               return;
             }
             Ok(Ok(n)) => n,
@@ -1697,7 +1739,7 @@ async fn acceptor(
               let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> = logger_conn.read().unwrap();
               logger_lock(
                 "warning",
-                &format!("Client {:?}: Socket read error: {}", addr, e),
+                &format!("Client {}: Socket read error: {}", addr, e),
               );
               return;
             }
@@ -1705,11 +1747,11 @@ async fn acceptor(
               disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
               let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> = logger_conn.read().unwrap();
               if no_bytes {
-                logger_lock("info", &format!("Client {:?}: Keep-alive timeout", addr));
+                logger_lock("info", &format!("Client {}: Keep-alive timeout", addr));
                 return;
               }
 
-              logger_lock("warning", &format!("Client {:?}: Read timeout", addr));
+              logger_lock("warning", &format!("Client {}: Read timeout", addr));
               return;
             }
           };
@@ -1733,7 +1775,7 @@ async fn acceptor(
                     logger_conn.read().unwrap();
                   logger_lock(
                     "info",
-                    &format!("Client {:?}: Sent payload: {}", addr, payload),
+                    &format!("Client {}: Sent payload: {}", addr, payload),
                   );
                 }
 
@@ -1790,7 +1832,7 @@ async fn acceptor(
                           disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
                           let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                             logger_conn.read().unwrap();
-                          logger_lock("warning", &format!("Client {:?}: Write error: {}", addr, e));
+                          logger_lock("warning", &format!("Client {}: Write error: {}", addr, e));
                           return;
                         }
                       }
@@ -1800,13 +1842,13 @@ async fn acceptor(
                           disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
                           let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                             logger_conn.read().unwrap();
-                          logger_lock("warning", &format!("Client {:?}: Flush error: {}", addr, e));
+                          logger_lock("warning", &format!("Client {}: Flush error: {}", addr, e));
                           return;
                         }
 
                         let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                           logger_conn.read().unwrap();
-                        logger_lock("info", &format!("Client {:?}: Write task finished", addr));
+                        logger_lock("info", &format!("Client {}: Write task finished", addr));
                         break;
                       }
                     }
@@ -1815,7 +1857,7 @@ async fn acceptor(
                       disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
                       let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                         logger_conn.read().unwrap();
-                      logger_lock("warning", &format!("Client {:?}: Write timeout", addr));
+                      logger_lock("warning", &format!("Client {}: Write timeout", addr));
                       return;
                     }
                   }
@@ -1829,7 +1871,7 @@ async fn acceptor(
                     logger_conn.read().unwrap();
                   logger_lock(
                     "warning",
-                    &format!("Client {:?}: Block read error: {}", addr, e),
+                    &format!("Client {}: Block read error: {}", addr, e),
                   );
 
                   return;
@@ -1869,7 +1911,7 @@ async fn acceptor(
                         disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
                         let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                           logger_conn.read().unwrap();
-                        logger_lock("warning", &format!("Client {:?}: Write error: {}", addr, e));
+                        logger_lock("warning", &format!("Client {}: Write error: {}", addr, e));
                         return;
                       }
                     }
@@ -1879,13 +1921,13 @@ async fn acceptor(
                         disconnect(&on_disconnect, &last_ctx, &opts_conn).await;
                         let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                           logger_conn.read().unwrap();
-                        logger_lock("warning", &format!("Client {:?}: Flush error: {}", addr, e));
+                        logger_lock("warning", &format!("Client {}: Flush error: {}", addr, e));
                         return;
                       }
 
                       let logger_lock: RwLockReadGuard<'_, Arc<Http1Logger>> =
                         logger_conn.read().unwrap();
-                      logger_lock("info", &format!("Client {:?}: Write task finished", addr));
+                      logger_lock("info", &format!("Client {}: Write task finished", addr));
                       break;
                     }
                   }
@@ -1926,7 +1968,7 @@ impl Http1 {
         String::from("_"),
         Arc::new(
           move |_ctx: Arc<Mutex<Http1Ctx>>, stream: Arc<Mutex<Http1Stream>>| {
-            let mut stream_lock = stream.lock().unwrap();
+            let mut stream_lock: std::sync::MutexGuard<'_, Http1Stream> = stream.lock().unwrap();
             stream_lock.set_code(404);
             stream_lock.push_json(
               &serde_json::json!({
@@ -1969,7 +2011,7 @@ impl Http1 {
   pub fn on(&self, path: &str, cb: Arc<Http1Handler>) {
     let mut handlers_write: RwLockWriteGuard<'_, HashMap<String, Arc<Http1Handler>>> =
       self.handlers.write().unwrap();
-    handlers_write.insert(path.to_string(), cb);
+    handlers_write.insert(String::from(path), cb);
   }
 
   pub fn start(&self) {
